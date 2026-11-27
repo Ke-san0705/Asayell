@@ -21,3 +21,7 @@ export function matchRoute(pathname: string, base: string): Route {
     default: return { name: 'notFound' }
   }
 }
+
+export function routePath(section: 'share' | 's' | 'o', parameter: string, base = import.meta.env.BASE_URL) {
+  return `${base.replace(/\/$/, '')}/${section}/${encodeURIComponent(parameter)}`
+}
