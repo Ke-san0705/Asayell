@@ -100,3 +100,76 @@ it('keeps messages off the support route and rejects support or unknown owner to
   }
   expect(listMessages).not.toHaveBeenCalled()
 })
+
+function press(label: string) {
+  return act(async () => {
+    const button = [...container.querySelectorAll('button')]
+      .find((candidate) => candidate.textContent?.trim() === label)
+    expect(button).toBeDefined()
+    button!.click()
+  })
+}
+
+it('previews real messages one at a time and closes the preview before wake-up', async () => {
+  vi.setSystemTime(Date.parse(wakeAt) - 60_000)
+  const goal = await createGoal()
+  await repository.createMessage({ goal_id: goal.goal_id, body: '最初のエール' })
+  await repository.createMessage({ goal_id: goal.goal_id, body: '次のエール' })
+  const listMessages = vi.spyOn(repository, 'listMessages')
+
+  await open('/Asayell/o/' + goal.owner_token)
+  expect(listMessages).not.toHaveBeenCalled()
+
+  await press('デモ：翌朝を体験する')
+  expect(listMessages).toHaveBeenCalledExactlyOnceWith(goal.goal_id)
+  expect(container.textContent).toContain('デモモードで表示しています')
+  expect(container.querySelector('blockquote')?.textContent).toBe('最初のエール')
+  expect(container.textContent).not.toContain('次のエール')
+
+  await press('次へ')
+  expect(container.querySelector('blockquote')?.textContent).toBe('次のエール')
+  await press('デモを終了する')
+  expect(container.textContent).toContain('明日の朝にエールが届きます')
+  expect(container.textContent).not.toContain('デモモードで表示しています')
+  expect(container.querySelector('blockquote')).toBeNull()
+  expect(listMessages).toHaveBeenCalledTimes(1)
+
+  await act(async () => vi.advanceTimersByTimeAsync(60_000))
+  expect(container.querySelector('blockquote')?.textContent).toBe('最初のエール')
+  expect(listMessages).toHaveBeenCalledTimes(2)
+})
+
+it('keeps the demo identified for an empty inbox and lets the owner return', async () => {
+  vi.setSystemTime(Date.parse(wakeAt) - 60_000)
+  const goal = await createGoal()
+  await open('/Asayell/o/' + goal.owner_token)
+
+  await press('デモ：翌朝を体験する')
+  expect(container.textContent).toContain('デモモードで表示しています')
+  expect(container.textContent).toContain('0件')
+  expect(container.textContent).toContain('今日も自分のペースで')
+  expect(container.querySelector('blockquote')).toBeNull()
+
+  await press('デモを終了する')
+  expect(container.textContent).toContain('明日の朝にエールが届きます')
+})
+
+it('discards a pending demo response after the owner exits', async () => {
+  vi.setSystemTime(Date.parse(wakeAt) - 60_000)
+  const goal = await createGoal()
+  const message = await repository.createMessage({ goal_id: goal.goal_id, body: '遅れて届く本文' })
+  let resolvePreview!: (messages: Awaited<ReturnType<typeof repository.listMessages>>) => void
+  const pending = new Promise<Awaited<ReturnType<typeof repository.listMessages>>>((resolve) => {
+    resolvePreview = resolve
+  })
+  vi.spyOn(repository, 'listMessages').mockReturnValueOnce(pending)
+  await open('/Asayell/o/' + goal.owner_token)
+
+  await press('デモ：翌朝を体験する')
+  expect(container.textContent).toContain('デモモードで表示しています')
+  await press('デモを終了する')
+  await act(async () => resolvePreview([message]))
+
+  expect(container.textContent).not.toContain('遅れて届く本文')
+  expect(container.textContent).toContain('明日の朝にエールが届きます')
+})

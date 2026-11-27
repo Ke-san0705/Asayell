@@ -50,11 +50,11 @@ export function SupportPost({ repository, supportToken }: SupportPostProps) {
   }
 
   if (loadFailed) {
-    return <p role="alert">目標を読み込めませんでした。ページを開き直してみてください。</p>
+    return <p role="alert">今は目標を開けませんでした。少し時間をおいて、もう一度開いてみてください。</p>
   }
   if (goal === undefined) return <p role="status">目標を読み込んでいます…</p>
   if (goal === null) {
-    return <p role="status">リンクが正しくないかもしれません。送ってくれた方に確認してみてください。</p>
+    return <p role="status">このブラウザでは目標が見つかりませんでした。リンクを送ってくれた方に聞いてみてください。</p>
   }
 
   return (
@@ -66,7 +66,7 @@ export function SupportPost({ repository, supportToken }: SupportPostProps) {
       </section>
       {postStatus === 'sent' ? (
         <p className="support-confirmation" role="status">
-          エールを送りました。翌朝に届きます。
+          エールを送りました。応援の気持ちは、翌朝に届きます。
         </p>
       ) : (
         <form className="support-form" onSubmit={submit}>
@@ -94,16 +94,16 @@ export function SupportPost({ repository, supportToken }: SupportPostProps) {
               aria-invalid={tooLong}
             />
             <p id="support-length" className="support-length">
-              {tooLong && <span role="alert">150文字以内で入力してください。</span>}
+              {tooLong && <span role="alert">エールは150文字まで届けられます。</span>}
               <span>{body.length} / {messageLimit}文字</span>
             </p>
           </div>
           {postStatus === 'failed' && (
             <p className="support-error" role="alert">
-              エールを送れませんでした。もう一度お試しください。
+              今はエールを送れませんでした。書いたメッセージはそのままです。もう一度お試しください。
             </p>
           )}
-          <button type="submit" disabled={!canSubmit || pending}>
+          <button className="action" type="submit" disabled={!canSubmit || pending}>
             {pending ? '送信中…' : 'エールを投稿する'}
           </button>
         </form>

@@ -3,7 +3,7 @@ import type { AsayellRepository, Message } from './repository'
 
 type InboxState =
   | { kind: 'loading' | 'missing' | 'error' }
-  | { kind: 'waiting'; nickname: string }
+  | { kind: 'waiting'; nickname: string; goalId: string }
   | { kind: 'ready'; nickname: string; messages: Message[] }
 
 // Browsers store timeout delays as signed 32-bit integers.
@@ -16,6 +16,16 @@ interface MorningInboxProps {
 
 export function MorningInbox({ ownerToken, repository }: MorningInboxProps) {
   const [inbox, setInbox] = useState<InboxState>({ kind: 'loading' })
+  const [demo, setDemo] = useState<{ goalId: string; nickname: string } | null>(null)
+  const demoButton = useRef<HTMLButtonElement>(null)
+  const returningFromDemo = useRef(false)
+
+  useEffect(() => {
+    if (!demo && returningFromDemo.current) {
+      demoButton.current?.focus()
+      returningFromDemo.current = false
+    }
+  }, [demo])
 
   useEffect(() => {
     let active = true
@@ -43,7 +53,7 @@ export function MorningInbox({ ownerToken, repository }: MorningInboxProps) {
       function checkWakeTime() {
         const remaining = wakeAt - Date.now()
         if (remaining > 0) {
-          setInbox({ kind: 'waiting', nickname })
+          setInbox({ kind: 'waiting', nickname, goalId: goal_id })
           timer = setTimeout(checkWakeTime, Math.min(remaining, maxTimeout))
           return
         }
@@ -63,6 +73,15 @@ export function MorningInbox({ ownerToken, repository }: MorningInboxProps) {
     }
   }, [ownerToken, repository])
 
+  if (demo) {
+    return (
+      <InboxDemo goalId={demo.goalId} nickname={demo.nickname} repository={repository} onExit={() => {
+        returningFromDemo.current = true
+        setDemo(null)
+      }} />
+    )
+  }
+
   return (
     <div className="morning-inbox" aria-live="polite">
       {inbox.kind === 'loading' && <p>受信リンクを確認しています。</p>}
@@ -72,11 +91,66 @@ export function MorningInbox({ ownerToken, repository }: MorningInboxProps) {
       {inbox.kind === 'error' && (
         <p>今はエールを開けませんでした。少し時間をおいて、もう一度このページを開いてみてください。</p>
       )}
-      {(inbox.kind === 'waiting' || inbox.kind === 'ready') && (
+      {inbox.kind === 'ready' && (
         <p className="morning-greeting">{inbox.nickname}さん、おはようございます。</p>
       )}
-      {inbox.kind === 'waiting' && <p className="inbox-note">明日の朝にエールが届きます</p>}
+      {inbox.kind === 'waiting' && (
+        <>
+          <p className="morning-greeting">{inbox.nickname}さんへ</p>
+          <p className="inbox-note">明日の朝にエールが届きます。起床予定時刻になったら、ここで読めます。</p>
+          <button className="action secondary inbox-action" type="button" ref={demoButton}
+            onClick={() => setDemo({ goalId: inbox.goalId, nickname: inbox.nickname })}>
+            デモ：翌朝を体験する
+          </button>
+        </>
+      )}
       {inbox.kind === 'ready' && <MessageReader messages={inbox.messages} />}
+    </div>
+  )
+}
+
+function InboxDemo({ goalId, nickname, repository, onExit }: {
+  goalId: string
+  nickname: string
+  repository: AsayellRepository
+  onExit: () => void
+}) {
+  const [preview, setPreview] = useState<
+    { kind: 'loading' | 'error' } | { kind: 'ready'; messages: Message[] }
+  >({ kind: 'loading' })
+  const notice = useRef<HTMLParagraphElement>(null)
+
+  useEffect(() => {
+    notice.current?.focus()
+    let active = true
+
+    async function loadPreview() {
+      try {
+        const messages = await repository.listMessages(goalId)
+        if (active) setPreview({ kind: 'ready', messages })
+      } catch {
+        if (active) setPreview({ kind: 'error' })
+      }
+    }
+
+    void loadPreview()
+    return () => { active = false }
+  }, [goalId, repository])
+
+  return (
+    <div className="morning-inbox">
+      <p className="demo-notice" ref={notice} tabIndex={-1}>デモモードで表示しています</p>
+      <div aria-live="polite">
+        <p className="morning-greeting">{nickname}さん、おはようございます。</p>
+        {preview.kind === 'loading' && <p>エールを確認しています。</p>}
+        {preview.kind === 'error' && (
+          <p>今はエールを開けませんでした。デモを終了してから、もう一度お試しください。</p>
+        )}
+        {preview.kind === 'ready' && <MessageReader messages={preview.messages} />}
+      </div>
+      <button className="action secondary inbox-action" type="button" onClick={onExit}>
+        デモを終了する
+      </button>
     </div>
   )
 }
@@ -102,7 +176,7 @@ function MessageReader({ messages }: { messages: Message[] }) {
             <blockquote>{message.body}</blockquote>
             {message.sender?.trim() && <p>{message.sender}さんより</p>}
           </figure>
-          <button className="inbox-next" type="button" onClick={() => setIndex(index + 1)}>
+          <button className="action inbox-action" type="button" onClick={() => setIndex(index + 1)}>
             次へ
           </button>
         </>
