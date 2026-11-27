@@ -38,6 +38,15 @@ describe('LocalStorageRepository', () => {
     expect(await reopened.getGoalById('missing')).toBeNull()
   })
 
+  it.each(['', '2026-11-29T07:00:00', '2026-11-29T25:00:00+09:00'])(
+    'rejects an invalid or timezone-less wake_at (%s) without writing',
+    async (wake_at) => {
+      const { entries, repository } = setup()
+      await expect(repository.createGoal({ ...goalInput, wake_at })).rejects.toThrow(RangeError)
+      expect(entries.size).toBe(0)
+    },
+  )
+
   it('issues distinct URL-safe tokens that work only in their assigned lookup', async () => {
     const { repository } = setup()
     const first = await repository.createGoal(goalInput)

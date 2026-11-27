@@ -2,7 +2,7 @@ export interface GoalInput {
   nickname: string
   title: string
   detail?: string
-  /** ISO 8601 datetime for the next wake-up in Asia/Tokyo. */
+  /** Next wake-up in Asia/Tokyo, supplied as an ISO 8601 timestamp with an offset or Z. */
   wake_at: string
 }
 
@@ -75,6 +75,10 @@ export class LocalStorageRepository implements AsayellRepository {
     if (!nickname.trim() || nickname.length > 20 || !title.trim() || title.length > 100 ||
         (detail !== undefined && detail.length > 300)) {
       throw new RangeError('目標の入力内容を確認してください。')
+    }
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(wake_at) ||
+        !Number.isFinite(Date.parse(wake_at))) {
+      throw new RangeError('タイムゾーン付きの起床予定日時を入力してください。')
     }
 
     const goal: Goal = {
