@@ -62,3 +62,118 @@ h1 {
   display: inline-block;
   margin-top: 1rem;
 }
+
+.intro {
+  margin: 0.75rem 0 1.5rem;
+}
+
+.goal-form,
+.share-options {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.goal-form label {
+  display: block;
+  min-width: 0;
+  font-weight: 650;
+}
+
+.goal-form .hint {
+  color: #694d46;
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.goal-form input,
+.goal-form textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 3rem;
+  margin-top: 0.375rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid #b99081;
+  border-radius: 0.75rem;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+}
+
+.goal-form textarea {
+  resize: vertical;
+}
+
+.goal-form input:focus-visible,
+.goal-form textarea:focus-visible,
+.action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.action,
+.card a.action {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 3rem;
+  margin: 0;
+  padding: 0.625rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.875rem;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.action:disabled {
+  border-color: #f0e1d7;
+  background: #f0e1d7;
+  color: #6f544c;
+  cursor: default;
+}
+
+.card a.secondary {
+  background: var(--surface);
+  color: var(--accent);
+}
+
+.share-option {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: #fff5e9;
+}
+
+.share-option h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.share-option p {
+  margin: 0.5rem 0 0.75rem;
+}
+
+.share-url {
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+  font-size: 0.875rem;
+}
+
+.feedback {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.875rem;
+}
+
+.share-option .feedback:not(:empty) {
+  margin-top: 0.625rem;
+}
