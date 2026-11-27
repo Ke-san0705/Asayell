@@ -43,7 +43,7 @@ export function App({ route, repository }: AppProps) {
             />
           )}
           {route.name === 'notFound' && (
-            <a href={import.meta.env.BASE_URL}>目標登録へ戻る</a>
+            <a className="action secondary recovery-action" href={import.meta.env.BASE_URL}>目標登録へ戻る</a>
           )}
         </main>
       </div>

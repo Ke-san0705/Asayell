@@ -32,13 +32,13 @@ export function GoalRegistration({ repository }: { repository: AsayellRepository
     } catch {
       submitting.current = false
       setSaving(false)
-      setError('目標を登録できませんでした。もう一度お試しください。')
+      setError('今は目標を登録できませんでした。入力した内容はそのままです。もう一度お試しください。')
     }
   }
 
   return (
     <>
-      <p className="intro">次の朝が少し楽しみになる、あなたの目標を登録しましょう。</p>
+      <p className="intro">明日の朝が少し楽しみになることを、ひとつ書いてみませんか。</p>
       <form className="goal-form" onSubmit={submit} aria-busy={saving}>
         <label>
           ニックネーム <span className="hint">（{goalLimits.nickname}文字まで）</span>

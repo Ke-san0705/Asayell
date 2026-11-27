@@ -12,9 +12,9 @@ export function GoalShare({ repository, goalId }: { repository: AsayellRepositor
     void repository.getGoalById(goalId).then((storedGoal) => {
       if (!active) return
       if (storedGoal) setGoal(storedGoal)
-      else setLoadMessage('目標が見つかりませんでした。登録したブラウザで開いてください。')
+      else setLoadMessage('このブラウザでは目標が見つかりませんでした。登録したブラウザで開いてみてください。')
     }).catch(() => {
-      if (active) setLoadMessage('目標を読み込めませんでした。ページを再読み込みしてください。')
+      if (active) setLoadMessage('今は目標を開けませんでした。少し時間をおいて、ページを開き直してみてください。')
     })
     return () => { active = false }
   }, [repository, goalId])
@@ -30,13 +30,13 @@ export function GoalShare({ repository, goalId }: { repository: AsayellRepositor
       await navigator.clipboard.writeText(supportUrl)
       setCopyMessage('応援募集URLをコピーしました。')
     } catch {
-      setCopyMessage('自動でコピーできませんでした。表示されている応援募集URLを選択してコピーしてください。')
+      setCopyMessage('自動でコピーできませんでした。上に表示されているURLを選んでコピーできます。')
     }
   }
 
   return (
     <>
-      <p className="intro">目標を登録しました。応援募集URLを届けて、エールを集めましょう。</p>
+      <p className="intro">目標を登録しました。応援してほしい人に、応援募集URLを渡せます。</p>
       <div className="share-options">
         <section className="share-option">
           <h2>応援募集URL</h2>
@@ -47,7 +47,7 @@ export function GoalShare({ repository, goalId }: { repository: AsayellRepositor
         </section>
         <section className="share-option">
           <h2>本人専用の受信URL</h2>
-          <p id="owner-url-note">受信URLはご本人専用です。第三者には共有せず、ご自身で保管してください。</p>
+          <p id="owner-url-note">エールを読むための、ご本人だけのURLです。朝に開けるよう、ご自身のために保管しておいてください。</p>
           <p className="share-url">{ownerUrl}</p>
           <a className="action secondary" href={ownerUrl} aria-describedby="owner-url-note">
             本人専用の受信URLを開く
