@@ -1,6 +1,7 @@
 import { createContext } from 'react'
 import { GoalRegistration } from './GoalRegistration'
 import { GoalShare } from './GoalShare'
+import { MorningInbox } from './MorningInbox'
 import type { AsayellRepository } from './repository'
 import type { Route } from './routes'
 
@@ -30,6 +31,9 @@ export function App({ route, repository }: AppProps) {
           <h1>{screens[route.name]}</h1>
           {route.name === 'register' && <GoalRegistration repository={repository} />}
           {route.name === 'share' && <GoalShare key={route.goalId} repository={repository} goalId={route.goalId} />}
+          {route.name === 'owner' && (
+            <MorningInbox key={route.ownerToken} ownerToken={route.ownerToken} repository={repository} />
+          )}
           {route.name === 'notFound' && (
             <a href={import.meta.env.BASE_URL}>目標登録へ戻る</a>
           )}
