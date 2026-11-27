@@ -177,3 +177,63 @@ h1 {
 .share-option .feedback:not(:empty) {
   margin-top: 0.625rem;
 }
+
+.morning-inbox {
+  overflow-wrap: anywhere;
+}
+
+.morning-greeting {
+  margin-block: 1rem 0;
+  font-weight: 650;
+}
+
+.inbox-note,
+.inbox-message {
+  margin: 1rem 0 0;
+  padding: clamp(1rem, 5vw, 1.5rem);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: linear-gradient(155deg, #fff2db, #fff8f3);
+}
+
+.inbox-message figcaption,
+.inbox-message p {
+  font-size: 0.875rem;
+  color: var(--accent);
+}
+
+.inbox-message blockquote {
+  margin: 0.75rem 0 0;
+  font-size: 1.125rem;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.inbox-message p {
+  margin: 0.75rem 0 0;
+  text-align: end;
+}
+
+.inbox-next {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 1rem;
+  padding: 0.65rem 1rem;
+  border: 0;
+  border-radius: 0.875rem;
+  background: var(--accent);
+  color: #fffdf9;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.inbox-next:hover {
+  background: #733b2e;
+}
+
+.inbox-next:focus-visible,
+.inbox-note:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
