@@ -12,6 +12,7 @@ export default defineConfig({
     launchOptions: { executablePath: process.env.ASAYELL_CHROMIUM_PATH },
   },
   webServer: {
+    env: { VITE_ASAYELL_REPOSITORY: 'local' },
     command: 'npm run dev -- --host 127.0.0.1 --port 4173 --strictPort',
     url: origin + '/Asayell/',
   },

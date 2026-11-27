@@ -77,6 +77,6 @@ it('shows the target goal and saves a valid anonymous post without reading other
 
 it('shows a friendly message for a missing token', async () => {
   await openSupportPage('missing')
-  expect(container.textContent).toContain('このブラウザでは目標が見つかりませんでした')
+  expect(container.textContent).toContain('目標が見つかりませんでした')
   expect(container.querySelector('form')).toBeNull()
 })

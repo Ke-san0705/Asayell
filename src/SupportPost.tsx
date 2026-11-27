@@ -37,8 +37,7 @@ export function SupportPost({ repository, supportToken }: SupportPostProps) {
     submissionStarted.current = true
     setPostStatus('pending')
     try {
-      await repository.createMessage({
-        goal_id: goal.goal_id,
+      await repository.postMessage(supportToken, {
         sender: sender.trim() || undefined,
         body,
       })
@@ -54,7 +53,7 @@ export function SupportPost({ repository, supportToken }: SupportPostProps) {
   }
   if (goal === undefined) return <p role="status">目標を読み込んでいます…</p>
   if (goal === null) {
-    return <p role="status">このブラウザでは目標が見つかりませんでした。リンクを送ってくれた方に聞いてみてください。</p>
+    return <p role="status">目標が見つかりませんでした。リンクを送ってくれた方に聞いてみてください。</p>
   }
 
   return (
@@ -75,6 +74,7 @@ export function SupportPost({ repository, supportToken }: SupportPostProps) {
             <input
               id="support-sender"
               name="sender"
+              maxLength={20}
               value={sender}
               onChange={(event) => setSender(event.target.value)}
               disabled={pending}

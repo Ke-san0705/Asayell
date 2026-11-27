@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AsayellRepository, Message } from './repository'
+import type { AsayellRepository, InboxMessage } from './repository'
 
 type InboxState =
   | { kind: 'loading' | 'missing' | 'error' }
-  | { kind: 'waiting'; nickname: string; goalId: string }
-  | { kind: 'ready'; nickname: string; messages: Message[] }
+  | { kind: 'waiting'; nickname: string }
+  | { kind: 'ready'; nickname: string; messages: InboxMessage[] }
 
 // Browsers store timeout delays as signed 32-bit integers.
 const maxTimeout = 2_147_483_647
@@ -16,7 +16,7 @@ interface MorningInboxProps {
 
 export function MorningInbox({ ownerToken, repository }: MorningInboxProps) {
   const [inbox, setInbox] = useState<InboxState>({ kind: 'loading' })
-  const [demo, setDemo] = useState<{ goalId: string; nickname: string } | null>(null)
+  const [demo, setDemo] = useState<{ nickname: string } | null>(null)
   const demoButton = useRef<HTMLButtonElement>(null)
   const returningFromDemo = useRef(false)
 
@@ -43,7 +43,7 @@ export function MorningInbox({ ownerToken, repository }: MorningInboxProps) {
         return
       }
 
-      const { goal_id, nickname } = goal
+      const { nickname, is_unlocked } = goal
       const wakeAt = Date.parse(goal.wake_at)
       if (!Number.isFinite(wakeAt)) {
         showError()
@@ -52,13 +52,17 @@ export function MorningInbox({ ownerToken, repository }: MorningInboxProps) {
 
       function checkWakeTime() {
         const remaining = wakeAt - Date.now()
-        if (remaining > 0) {
-          setInbox({ kind: 'waiting', nickname, goalId: goal_id })
-          timer = setTimeout(checkWakeTime, Math.min(remaining, maxTimeout))
+        if (is_unlocked === false || (is_unlocked === undefined && remaining > 0)) {
+          setInbox({ kind: 'waiting', nickname })
+          const delay = Math.min(is_unlocked === false ? Math.max(remaining, 1000) : remaining, maxTimeout)
+          timer = setTimeout(() => {
+            if (is_unlocked === false) void loadInbox().catch(showError)
+            else checkWakeTime()
+          }, delay)
           return
         }
 
-        void repository.listMessages(goal_id).then((messages) => {
+        void repository.listOwnerMessages(ownerToken).then((messages) => {
           if (active) setInbox({ kind: 'ready', nickname, messages })
         }).catch(showError)
       }
@@ -75,7 +79,7 @@ export function MorningInbox({ ownerToken, repository }: MorningInboxProps) {
 
   if (demo) {
     return (
-      <InboxDemo goalId={demo.goalId} nickname={demo.nickname} repository={repository} onExit={() => {
+      <InboxDemo ownerToken={ownerToken} nickname={demo.nickname} repository={repository} onExit={() => {
         returningFromDemo.current = true
         setDemo(null)
       }} />
@@ -99,7 +103,7 @@ export function MorningInbox({ ownerToken, repository }: MorningInboxProps) {
           <p className="morning-greeting">{inbox.nickname}さんへ</p>
           <p className="inbox-note">明日の朝にエールが届きます。起床予定時刻になったら、ここで読めます。</p>
           <button className="action secondary inbox-action" type="button" ref={demoButton}
-            onClick={() => setDemo({ goalId: inbox.goalId, nickname: inbox.nickname })}>
+            onClick={() => setDemo({ nickname: inbox.nickname })}>
             デモ：翌朝を体験する
           </button>
         </>
@@ -109,14 +113,14 @@ export function MorningInbox({ ownerToken, repository }: MorningInboxProps) {
   )
 }
 
-function InboxDemo({ goalId, nickname, repository, onExit }: {
-  goalId: string
+function InboxDemo({ ownerToken, nickname, repository, onExit }: {
+  ownerToken: string
   nickname: string
   repository: AsayellRepository
   onExit: () => void
 }) {
   const [preview, setPreview] = useState<
-    { kind: 'loading' | 'error' } | { kind: 'ready'; messages: Message[] }
+    { kind: 'loading' | 'error' } | { kind: 'ready'; messages: InboxMessage[] }
   >({ kind: 'loading' })
   const notice = useRef<HTMLParagraphElement>(null)
 
@@ -126,7 +130,7 @@ function InboxDemo({ goalId, nickname, repository, onExit }: {
 
     async function loadPreview() {
       try {
-        const messages = await repository.listMessages(goalId)
+        const messages = await repository.listOwnerMessages(ownerToken, true)
         if (active) setPreview({ kind: 'ready', messages })
       } catch {
         if (active) setPreview({ kind: 'error' })
@@ -135,7 +139,7 @@ function InboxDemo({ goalId, nickname, repository, onExit }: {
 
     void loadPreview()
     return () => { active = false }
-  }, [goalId, repository])
+  }, [ownerToken, repository])
 
   return (
     <div className="morning-inbox">
@@ -155,7 +159,7 @@ function InboxDemo({ goalId, nickname, repository, onExit }: {
   )
 }
 
-function MessageReader({ messages }: { messages: Message[] }) {
+function MessageReader({ messages }: { messages: InboxMessage[] }) {
   const [index, setIndex] = useState(0)
   const closing = useRef<HTMLParagraphElement>(null)
   const message = messages[index]

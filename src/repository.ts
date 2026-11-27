@@ -12,7 +12,8 @@ export interface Goal extends GoalInput {
   owner_token: string
 }
 
-export type SupportGoal = Pick<Goal, 'goal_id' | 'nickname' | 'title' | 'detail'>
+export type SupportGoal = Pick<Goal, 'nickname' | 'title' | 'detail'>
+export type OwnerGoal = GoalInput & { is_unlocked?: boolean }
 
 export interface MessageInput {
   goal_id: string
@@ -26,13 +27,16 @@ export interface Message extends MessageInput {
   status: 'visible'
 }
 
+export type SupportMessageInput = Pick<MessageInput, 'sender' | 'body'>
+export type InboxMessage = Pick<Message, 'sender' | 'body' | 'created_at'>
+
 export interface AsayellRepository {
   createGoal(input: GoalInput): Promise<Goal>
   getGoalById(goalId: string): Promise<Goal | null>
   getGoalBySupportToken(token: string): Promise<SupportGoal | null>
-  getGoalByOwnerToken(token: string): Promise<Goal | null>
-  createMessage(input: MessageInput): Promise<Message>
-  listMessages(goalId: string): Promise<Message[]>
+  getGoalByOwnerToken(token: string): Promise<OwnerGoal | null>
+  postMessage(supportToken: string, input: SupportMessageInput): Promise<void>
+  listOwnerMessages(ownerToken: string, demo?: boolean): Promise<InboxMessage[]>
 }
 
 type RepositoryStorage = Pick<Storage, 'getItem' | 'setItem' | 'key' | 'length'>
@@ -46,6 +50,30 @@ function messagePrefix(goalId: string) {
 function createToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(16))
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+export function createGoalTokens() {
+  const support_token = createToken()
+  let owner_token = createToken()
+  while (owner_token === support_token) owner_token = createToken()
+  return { support_token, owner_token }
+}
+
+export function validateGoal({ nickname, title, detail, wake_at }: GoalInput) {
+  if (!nickname.trim() || nickname.length > 20 || !title.trim() || title.length > 100 ||
+      (detail !== undefined && detail.length > 300)) {
+    throw new RangeError('目標の入力内容を確認してください。')
+  }
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(wake_at) ||
+      !Number.isFinite(Date.parse(wake_at))) {
+    throw new RangeError('タイムゾーン付きの起床予定日時を入力してください。')
+  }
+}
+
+export function validateMessageBody(body: string) {
+  if (!body.trim() || body.length > 150) {
+    throw new RangeError('エールは150文字以内で入力してください。')
+  }
 }
 
 export class LocalStorageRepository implements AsayellRepository {
@@ -72,22 +100,13 @@ export class LocalStorageRepository implements AsayellRepository {
 
   async createGoal(input: GoalInput): Promise<Goal> {
     const { nickname, title, detail, wake_at } = input
-    if (!nickname.trim() || nickname.length > 20 || !title.trim() || title.length > 100 ||
-        (detail !== undefined && detail.length > 300)) {
-      throw new RangeError('目標の入力内容を確認してください。')
-    }
-    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(wake_at) ||
-        !Number.isFinite(Date.parse(wake_at))) {
-      throw new RangeError('タイムゾーン付きの起床予定日時を入力してください。')
-    }
+    validateGoal(input)
 
     const goal: Goal = {
       nickname, title, detail, wake_at,
       goal_id: crypto.randomUUID(),
-      support_token: createToken(),
-      owner_token: createToken(),
+      ...createGoalTokens(),
     }
-    while (goal.owner_token === goal.support_token) goal.owner_token = createToken()
     this.store.setItem(goalPrefix + goal.goal_id, JSON.stringify(goal))
     return goal
   }
@@ -96,7 +115,7 @@ export class LocalStorageRepository implements AsayellRepository {
     return this.read<Goal>(goalPrefix + goalId)
   }
 
-  async getGoalBySupportToken(token: string): Promise<SupportGoal | null> {
+  async getGoalBySupportToken(token: string): Promise<(SupportGoal & Pick<Goal, 'goal_id'>) | null> {
     for (const goal of this.records<Goal>(goalPrefix)) {
       if (goal.support_token === token) {
         const { goal_id, nickname, title, detail } = goal
@@ -113,11 +132,21 @@ export class LocalStorageRepository implements AsayellRepository {
     return null
   }
 
+  async postMessage(supportToken: string, input: SupportMessageInput): Promise<void> {
+    const goal = await this.getGoalBySupportToken(supportToken)
+    if (!goal) throw new Error('目標が見つかりません。')
+    await this.createMessage({ ...input, goal_id: goal.goal_id })
+  }
+
+  async listOwnerMessages(ownerToken: string, demo = false): Promise<InboxMessage[]> {
+    const goal = await this.getGoalByOwnerToken(ownerToken)
+    if (!goal || (!demo && Date.now() < Date.parse(goal.wake_at))) return []
+    return this.listMessages(goal.goal_id)
+  }
+
   async createMessage(input: MessageInput): Promise<Message> {
     const { goal_id, sender, body } = input
-    if (!body.trim() || body.length > 150) {
-      throw new RangeError('エールは150文字以内で入力してください。')
-    }
+    validateMessageBody(body)
     if (!await this.getGoalById(goal_id)) {
       throw new Error('目標が見つかりません。')
     }
