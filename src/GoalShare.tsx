@@ -40,7 +40,7 @@ export function GoalShare({ repository, goalId }: { repository: AsayellRepositor
       <div className="share-options">
         <section className="share-option">
           <h2>応援募集URL</h2>
-          <p>この試作版では、登録したブラウザで応援画面を開けます。</p>
+          <p>応援してほしい人に、このURLを送ってください。</p>
           <p className="share-url">{supportUrl}</p>
           <button className="action" type="button" onClick={copySupportUrl}>応援募集URLをコピー</button>
           <div className="feedback" role="status">{copyMessage}</div>

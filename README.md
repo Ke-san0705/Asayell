@@ -7,10 +7,10 @@ Startup Weekend 富士 4th で考案されたプロトタイプを、GitHub Issu
 
 ## 仕様
 - 正本仕様: Startup Weekend 富士 4th プロトタイプ開発仕様書 v0.1（2026-11-27）
-- 開発設計: [docs/design-v1.md](docs/design-v1.md)
+- 開発設計: [docs/design-v2.md](docs/design-v2.md) / [ラウンド1の画面・体験](docs/design-v1.md)
 
-## 現在のスコープ（ラウンド1）
-- データ保存は localStorage のみ（P0先行）。データ層はインターフェースで分離し、将来 Supabase へ差し替え可能にする
+## 現在のスコープ（ラウンド2）
+- Supabase RPC で目標とエールを保存し、別の端末から応援できます。
 - 画面: 目標登録 / 共有 / 応援投稿 / 翌朝の受信（デモモード付き）
 
 ## 開発
@@ -26,6 +26,10 @@ npm run build
 ```
 
 開発サーバーでは `/Asayell/` を開きます。
+
+- 既定のデータソースは Supabase です。接続先を指定する場合は `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KEY` に公開クライアント用の値を設定します。未設定時はアプリ内の公開設定を使います。
+- Supabase モードで登録・投稿・受信を行うには、接続先に [基盤 SQL](supabase/migrations/20261128000000_asayell_foundation.sql) を適用しておきます。
+- ブラウザ内で完結させる場合は `VITE_ASAYELL_REPOSITORY=local` を指定します。Playwright の既存受け入れテストはこのモードで実行します。
 
 ## GitHub Pages
 

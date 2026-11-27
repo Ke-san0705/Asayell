@@ -1,0 +1,103 @@
+import {
+  createGoalTokens, validateGoal, validateMessageBody,
+  type AsayellRepository, type Goal, type GoalInput, type InboxMessage,
+  type OwnerGoal, type SupportGoal, type SupportMessageInput,
+} from './repository'
+
+type ShareStorage = Pick<Storage, 'getItem' | 'setItem'>
+type GoalRow = Omit<GoalInput, 'detail'> & { detail: string | null }
+type CreatedGoalRow = GoalRow & { id: string; support_token: string; owner_token: string }
+type OwnerGoalRow = GoalRow & { is_unlocked: boolean }
+type MessageRow = Omit<InboxMessage, 'sender'> & { sender: string | null }
+
+export class SupabaseRepository implements AsayellRepository {
+  private readonly rpcUrl: string
+
+  constructor(
+    url: string,
+    private readonly anonKey: string,
+    private readonly storage?: ShareStorage,
+    private readonly request: typeof fetch = globalThis.fetch.bind(globalThis),
+  ) {
+    this.rpcUrl = url.replace(/\/+$/, '') + '/rest/v1/rpc/'
+  }
+
+  private async rpc<T>(name: string, args: Record<string, string | boolean | null>): Promise<T> {
+    const response = await this.request(this.rpcUrl + name, {
+      method: 'POST',
+      headers: {
+        apikey: this.anonKey,
+        Authorization: 'Bearer ' + this.anonKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(args),
+    })
+    if (!response.ok) throw new Error(`Supabase RPC ${name} failed (${response.status})`)
+    return response.json() as Promise<T>
+  }
+
+  private shareKey(goalId: string) {
+    return `asayell:share:${this.rpcUrl}:${goalId}`
+  }
+
+  async createGoal(input: GoalInput): Promise<Goal> {
+    validateGoal(input)
+    const storage = this.storage ?? window.localStorage
+    const { support_token, owner_token } = createGoalTokens()
+    const result = await this.rpc<CreatedGoalRow | CreatedGoalRow[]>('asayell_create_goal', {
+      p_nickname: input.nickname,
+      p_title: input.title,
+      p_detail: input.detail ?? null,
+      p_wake_at: input.wake_at,
+      p_support_token: support_token,
+      p_owner_token: owner_token,
+    })
+    const row = Array.isArray(result) ? result[0] : result
+    if (!row?.id) throw new Error('登録した目標を取得できませんでした。')
+    const goal: Goal = {
+      goal_id: row.id, nickname: row.nickname, title: row.title, detail: row.detail ?? undefined,
+      wake_at: row.wake_at, support_token: row.support_token, owner_token: row.owner_token,
+    }
+    // The share route is opened by ID in the registering browser after navigation.
+    storage.setItem(this.shareKey(goal.goal_id), JSON.stringify(goal))
+    return goal
+  }
+
+  async getGoalById(goalId: string): Promise<Goal | null> {
+    const value = (this.storage ?? window.localStorage).getItem(this.shareKey(goalId))
+    return value === null ? null : JSON.parse(value) as Goal
+  }
+
+  async getGoalBySupportToken(token: string): Promise<SupportGoal | null> {
+    const [row] = await this.rpc<GoalRow[]>('asayell_get_goal_for_support', { p_support_token: token })
+    if (!row) return null
+    return { nickname: row.nickname, title: row.title, detail: row.detail ?? undefined }
+  }
+
+  async getGoalByOwnerToken(token: string): Promise<OwnerGoal | null> {
+    const [row] = await this.rpc<OwnerGoalRow[]>('asayell_get_owner_goal', { p_owner_token: token })
+    if (!row) return null
+    return {
+      nickname: row.nickname, title: row.title, detail: row.detail ?? undefined,
+      wake_at: row.wake_at, is_unlocked: row.is_unlocked,
+    }
+  }
+
+  async postMessage(supportToken: string, input: SupportMessageInput): Promise<void> {
+    validateMessageBody(input.body)
+    const posted = await this.rpc<boolean>('asayell_post_message', {
+      p_support_token: supportToken,
+      p_sender: input.sender ?? null,
+      p_body: input.body,
+    })
+    if (posted !== true) throw new Error('エールを投稿できませんでした。')
+  }
+
+  async listOwnerMessages(ownerToken: string, demo = false): Promise<InboxMessage[]> {
+    const rows = await this.rpc<MessageRow[]>('asayell_get_owner_messages', {
+      p_owner_token: ownerToken,
+      p_demo: demo,
+    })
+    return rows.map(({ sender, body, created_at }) => ({ sender: sender ?? undefined, body, created_at }))
+  }
+}
