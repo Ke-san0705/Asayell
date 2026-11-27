@@ -237,3 +237,111 @@ h1 {
   outline: 2px solid var(--accent);
   outline-offset: 4px;
 }
+
+.support-goal {
+  margin-block: 1.25rem 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: #fff4df;
+  overflow-wrap: anywhere;
+}
+
+.support-goal h2,
+.support-goal p {
+  margin: 0;
+}
+
+.support-goal h2 {
+  margin-block: 0.25rem;
+  font-size: 1.25rem;
+}
+
+.support-goal p {
+  white-space: pre-wrap;
+}
+
+.support-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.support-form label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-weight: 650;
+}
+
+.support-form label span,
+.support-length {
+  color: #70554a;
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.support-form input,
+.support-form textarea,
+.support-form button {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 0.75rem;
+  font: inherit;
+}
+
+.support-form input,
+.support-form textarea {
+  display: block;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #ac8979;
+  background: #fff;
+  color: inherit;
+}
+
+.support-form textarea {
+  resize: vertical;
+}
+
+.support-form :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.support-form button {
+  padding: 0.65rem 1rem;
+  border: 0;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.support-form button:disabled {
+  background: #f1dfd6;
+  color: #70554a;
+  cursor: default;
+}
+
+.support-length {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.25rem 0.75rem;
+  margin: 0.25rem 0 0;
+}
+
+.support-length [role="alert"],
+.support-error {
+  color: #a1382c;
+}
+
+.support-error {
+  margin: 0;
+}
+
+.support-confirmation {
+  padding: 1rem;
+  border-radius: 0.75rem;
+  background: #f0f5e8;
+  color: #3c5037;
+  overflow-wrap: anywhere;
+}
