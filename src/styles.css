@@ -1,0 +1,64 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #412f2b;
+  background: #fffaf3;
+  font-synthesis: none;
+  line-height: 1.65;
+  --surface: #fffdf9;
+  --accent: #8a4738;
+  --border: #f1dbcd;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: linear-gradient(160deg, #fff1d6, #ffebe4 44%, #fffaf3 80%);
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 0.2em;
+}
+
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.shell {
+  width: min(100%, 38rem);
+  margin-inline: auto;
+  padding: 1.5rem clamp(1rem, 5vw, 2rem) 3rem;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.card {
+  margin-top: 2rem;
+  padding: clamp(1.5rem, 6vw, 3rem);
+  border: 1px solid var(--border);
+  border-radius: 1.75rem;
+  background: var(--surface);
+  box-shadow: 0 1rem 3rem #67412b12;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 5vw, 2rem);
+  line-height: 1.4;
+}
+
+.card a {
+  display: inline-block;
+  margin-top: 1rem;
+}
