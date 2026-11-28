@@ -1,3 +1,4 @@
+import { Link } from 'react-router'
 import { createContext } from 'react'
 import { BottomNavigation } from './BottomNavigation'
 import { Profile } from './Profile'
@@ -35,7 +36,7 @@ export function App({ route, repository }: AppProps) {
       ) : (
         <div className="shell">
           <header>
-            <a className="brand" href={import.meta.env.BASE_URL}>アサエール</a>
+            <Link className="brand" to={import.meta.env.BASE_URL}>アサエール</Link>
           </header>
           <main className="card">
             <h1>{screens[route.name]}</h1>
@@ -53,10 +54,10 @@ export function App({ route, repository }: AppProps) {
               />
             )}
             {route.name === 'owner' && (
-              <a href={import.meta.env.BASE_URL + 'feed'}>みんなの夢を見る</a>
+              <Link to={import.meta.env.BASE_URL + 'feed'}>みんなの夢を見る</Link>
             )}
             {route.name === 'notFound' && (
-              <a className="action secondary recovery-action" href={import.meta.env.BASE_URL}>目標登録へ戻る</a>
+              <Link className="action secondary recovery-action" to={import.meta.env.BASE_URL}>目標登録へ戻る</Link>
             )}
           </main>
         </div>

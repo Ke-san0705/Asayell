@@ -1,3 +1,4 @@
+import { Link } from 'react-router'
 import { useEffect, useState } from 'react'
 import type { AsayellRepository, Goal } from './repository'
 import { routePath } from './routes'
@@ -49,9 +50,9 @@ export function GoalShare({ repository, goalId }: { repository: AsayellRepositor
           <h2>本人専用の受信URL</h2>
           <p id="owner-url-note">エールを読むための、ご本人だけのURLです。朝に開けるよう、ご自身のために保管しておいてください。</p>
           <p className="share-url">{ownerUrl}</p>
-          <a className="action secondary" href={ownerUrl} aria-describedby="owner-url-note">
+          <Link className="action secondary" to={ownerUrl} aria-describedby="owner-url-note">
             本人専用の受信URLを開く
-          </a>
+          </Link>
         </section>
       </div>
     </>

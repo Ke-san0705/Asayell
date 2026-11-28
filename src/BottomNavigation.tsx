@@ -1,3 +1,4 @@
+import { Link } from 'react-router'
 import type { Route } from './routes'
 
 const destinations = [
@@ -12,10 +13,10 @@ export function BottomNavigation({ current }: { current: Route['name'] }) {
       <ul>
         {destinations.map(({ name, path, icon, label }) => (
           <li key={name}>
-            <a href={import.meta.env.BASE_URL + path} aria-current={name === current ? 'page' : undefined}>
+            <Link to={import.meta.env.BASE_URL + path} aria-current={name === current ? 'page' : undefined}>
               <span aria-hidden="true">{icon}</span>
               {label}
-            </a>
+            </Link>
           </li>
         ))}
       </ul>

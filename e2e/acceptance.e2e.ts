@@ -707,3 +707,57 @@ test('R5-01: registration requires an account name and changes persist after rel
   await page.getByRole('link', { name: '投稿' }).click()
   await expect(page.getByText('アカウント名 朝さん')).toBeVisible()
 })
+
+test('profile confirms navigation with an unsaved account name', async ({ page, context }, testInfo) => {
+  test.skip(testInfo.project.name === 'pages', 'Uses local storage or the RPC fixture.')
+  if (testInfo.project.name === 'supabase') await createSupabaseFixture().install(context)
+
+  await page.goto('/Asayell/')
+  const nav = page.getByRole('navigation', { name: 'メインナビゲーション' })
+  await nav.getByRole('link', { name: 'プロフィール' }).click()
+  const input = page.getByLabel('アカウント名')
+  const dialog = page.getByRole('dialog', { name: 'アカウント名を保存しますか？' })
+  await input.fill('朝さん')
+  await nav.getByRole('link', { name: 'みんなの夢' }).click()
+  await expect(dialog).toBeVisible()
+  await expect(page).toHaveURL(/\/me$/)
+  await dialog.getByRole('button', { name: 'キャンセル' }).click()
+  await expect(dialog).toBeHidden()
+  await expect(input).toHaveValue('朝さん')
+
+  await page.goBack()
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: '保存して移動' }).click()
+  await expect(page).toHaveURL(/\/Asayell\/$/)
+  await nav.getByRole('link', { name: 'プロフィール' }).click()
+  await page.reload()
+  await expect(input).toHaveValue('朝さん')
+
+  await input.fill('あ'.repeat(21))
+  await page.getByRole('link', { name: 'アサエール' }).click()
+  await dialog.getByRole('button', { name: '保存して移動' }).click()
+  await expect(dialog.getByRole('alert')).toHaveText('アカウント名は1〜20文字で入力してください。')
+  await expect(page).toHaveURL(/\/me$/)
+
+  if (testInfo.project.name === 'supabase') {
+    await dialog.getByRole('button', { name: 'キャンセル' }).click()
+    await expect(dialog).toBeHidden()
+    await input.fill('一時的な名前')
+    await page.route(fixtureUrl + rpcPath + 'asayell_upsert_profile', route =>
+      route.fulfill({ status: 500, json: { message: 'Save failed' } }), { times: 1 })
+    await page.getByRole('link', { name: 'アサエール' }).click()
+    await dialog.getByRole('button', { name: '保存して移動' }).click()
+    await expect(dialog.getByRole('alert')).toHaveText('アカウント名を保存できませんでした。もう一度お試しください。')
+    await expect(page).toHaveURL(/\/me$/)
+  }
+  await dialog.getByRole('button', { name: '保存せず移動' }).click()
+  await expect(page).toHaveURL(/\/Asayell\/$/)
+  await nav.getByRole('link', { name: 'プロフィール' }).click()
+  await expect(input).toHaveValue('朝さん')
+
+  await input.fill('新しい名前')
+  await page.getByRole('button', { name: 'アカウント名を保存する' }).click()
+  await expect(page.getByText('アカウント名を保存しました。')).toBeVisible()
+  await nav.getByRole('link', { name: 'みんなの夢' }).click()
+  await expect(page).toHaveURL(/\/feed$/)
+})

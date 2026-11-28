@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react'
+import { MemoryRouter } from 'react-router'
 import { createRoot } from 'react-dom/client'
 import { afterEach, expect, it, vi } from 'vitest'
 import { App } from './App'
@@ -20,7 +21,7 @@ async function openSupportPage(supportToken: string) {
   document.body.append(container)
   root = createRoot(container)
   await act(async () => {
-    root.render(<App route={{ name: 'support', supportToken }} repository={repository} />)
+    root.render(<MemoryRouter><App route={{ name: 'support', supportToken }} repository={repository} /></MemoryRouter>)
   })
 }
 
