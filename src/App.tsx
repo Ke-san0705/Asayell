@@ -2,6 +2,7 @@ import { createContext } from 'react'
 import { GoalRegistration } from './GoalRegistration'
 import { GoalShare } from './GoalShare'
 import { MorningInbox } from './MorningInbox'
+import { PublicFeed } from './PublicFeed'
 import type { AsayellRepository } from './repository'
 import type { Route } from './routes'
 import { SupportPost } from './SupportPost'
@@ -22,6 +23,8 @@ interface AppProps {
 }
 
 export function App({ route, repository }: AppProps) {
+  if (route.name === 'feed') return <PublicFeed repository={repository} />
+
   return (
     <RepositoryContext value={repository}>
       <div className="shell">
@@ -41,6 +44,9 @@ export function App({ route, repository }: AppProps) {
               repository={repository}
               supportToken={route.supportToken}
             />
+          )}
+          {(route.name === 'register' || route.name === 'owner') && (
+            <a href={import.meta.env.BASE_URL + 'feed'}>みんなの夢を見る</a>
           )}
           {route.name === 'notFound' && (
             <a className="action secondary recovery-action" href={import.meta.env.BASE_URL}>目標登録へ戻る</a>

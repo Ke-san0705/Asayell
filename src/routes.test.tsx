@@ -6,6 +6,7 @@ import { matchRoute } from './routes'
 
 it.each([
   ['/Asayell/', { name: 'register' }, '目標登録'],
+  ['/Asayell/feed', { name: 'feed' }, 'みんなの夢'],
   ['/Asayell/share/goal', { name: 'share', goalId: 'goal' }, '目標を共有'],
   ['/Asayell/s/support', { name: 'support', supportToken: 'support' }, 'エールを送る'],
   ['/Asayell/o/owner', { name: 'owner', ownerToken: 'owner' }, 'エールを受け取る'],
