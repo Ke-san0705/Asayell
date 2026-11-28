@@ -10,8 +10,11 @@ function waitForRpc(page: Page, name: string) {
   return page.waitForResponse(response => new URL(response.url()).pathname === rpcPath + name)
 }
 
-async function registerGoal(page: Page, pages: boolean, isPublic = false, category?: '夢' | '楽しみ'): Promise<Locator> {
-  if (!pages) await page.clock.setFixedTime(new Date('2026-11-28T20:00:00+09:00'))
+async function registerGoal(
+  page: Page, pages: boolean, isPublic = false, category?: '夢' | '楽しみ',
+  goalTitle = title, registeredAt = '2026-11-28T20:00:00+09:00',
+): Promise<Locator> {
+  if (!pages) await page.clock.setFixedTime(new Date(registeredAt))
   const wakeTime = pages
     ? new Date(Date.now() + 12 * 60 * 60 * 1000).toLocaleTimeString('en-GB', {
         timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit',
@@ -21,7 +24,7 @@ async function registerGoal(page: Page, pages: boolean, isPublic = false, catego
   const register = page.getByRole('button', { name: '目標を登録する' })
   await expect(register).toBeDisabled()
   await page.getByLabel('ニックネーム').fill(nickname)
-  await page.getByLabel('夢・目標・楽しみ').fill(title)
+  await page.getByLabel('夢・目標・楽しみ').fill(goalTitle)
   if (!pages) {
     await expect(page.getByRole('radio', { name: '目標', exact: true })).toBeChecked()
     await expect(page.getByLabel('詳細')).toHaveAttribute(
@@ -205,7 +208,7 @@ test('public feed links to support and excludes private or expired goals', async
   if (testInfo.project.name === 'supabase') await createSupabaseFixture(() => now.getTime()).install(context)
   await page.clock.install({ time: now })
 
-  const owner = await registerGoal(page, false)
+  const owner = await registerGoal(page, false, false, '夢')
   const ownerUrl = (await owner.getAttribute('href'))!
   await page.goto('/Asayell/')
   await page.getByRole('link', { name: 'みんなの夢', exact: true }).click()
@@ -223,6 +226,7 @@ test('public feed links to support and excludes private or expired goals', async
   await expect(visibility).toBeChecked()
   await expect(visibility).toBeEnabled()
   await page.getByRole('link', { name: 'みんなの夢を見る' }).click()
+  await expect(page.getByRole('article').getByText('夢', { exact: true })).toBeVisible()
   await expect(page.getByText(nickname, { exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
   await expect(page.getByText(detail, { exact: true })).toBeVisible()
@@ -254,19 +258,17 @@ test('public feed links to support and excludes private or expired goals', async
   await expect(support).toHaveCount(0)
 })
 
-test('public feed snaps to the next full-height reel', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'local', 'Multiple goals are registered with local storage.')
-  await registerGoal(page, false, true)
-  await registerGoal(page, false, true)
+test('public feed stacks compact cards newest first', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'local', 'Multiple goals are registered with the local repository.')
+  await registerGoal(page, false, true, '夢', '最初の投稿')
+  await registerGoal(page, false, true, '楽しみ', '新しい投稿', '2026-11-28T20:01:00+09:00')
   await page.goto('/Asayell/feed')
-  const feed = page.getByRole('region', { name: '公開中の夢' })
-  const reels = feed.getByRole('article')
-  await expect(reels).toHaveCount(2)
-  const height = await feed.evaluate(element => element.clientHeight)
-  expect(await reels.first().evaluate(element => element.offsetHeight)).toBe(height)
-  await feed.hover()
-  await page.mouse.wheel(0, Math.round(height * 0.75))
-  await expect.poll(() => feed.evaluate(element => element.scrollTop)).toBe(height)
+  const cards = page.getByRole('region', { name: '公開中の夢' }).getByRole('article')
+  await expect(cards.getByRole('heading')).toHaveText(['新しい投稿', '最初の投稿'])
+  await expect(cards.first().getByText('楽しみ', { exact: true })).toBeVisible()
+  await expect(cards.last().getByText('夢', { exact: true })).toBeVisible()
+  await expect(cards.last().getByRole('heading')).toBeInViewport()
+  await expectNoHorizontalOverflow(page)
 })
 
 test('primary navigation and device profile manage a registered goal', async ({ page, context, browser }, testInfo) => {

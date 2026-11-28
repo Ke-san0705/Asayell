@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { AsayellRepository, PublicGoal } from './repository'
+import { goalCategoryLabels, type AsayellRepository, type PublicGoal } from './repository'
 import { routePath } from './routes'
 
 type FeedState =
@@ -87,19 +87,20 @@ export function PublicFeed({ repository }: { repository: AsayellRepository }) {
           <a className="action" href={import.meta.env.BASE_URL}>自分の夢を登録する</a>
         </div>
       ) : (
-        <section className="feed-reels" aria-label="公開中の夢" tabIndex={0}>
-          {feed.goals.map(({ nickname, title, detail, wake_at, message_count, support_token }) => (
-            <article className="feed-reel" key={support_token}>
-              <div className="feed-goal">
+        <section className="feed-list" aria-label="公開中の夢">
+          {feed.goals.map(({ nickname, category, title, detail, wake_at, message_count, support_token }) => (
+            <article className="feed-goal" key={support_token}>
+              <header className="feed-goal-header">
                 <p className="feed-nickname">{nickname}</p>
-                <h2>{title}</h2>
-                {detail && <p className="feed-detail">{detail}</p>}
-                <div className="feed-meta">
-                  <time dateTime={wake_at}>{wakeLabel(wake_at, feed.now)}</time>
-                  <span>届いた応援 {message_count}件</span>
-                </div>
-                <a className="action" href={routePath('s', support_token)}>応援する</a>
+                <span className="category-badge">{goalCategoryLabels[category]}</span>
+              </header>
+              <h2>{title}</h2>
+              {detail && <p className="feed-detail">{detail}</p>}
+              <div className="feed-meta">
+                <time dateTime={wake_at}>{wakeLabel(wake_at, feed.now)}</time>
+                <span>届いた応援 {message_count}件</span>
               </div>
+              <a className="action" href={routePath('s', support_token)}>応援する</a>
             </article>
           ))}
         </section>
