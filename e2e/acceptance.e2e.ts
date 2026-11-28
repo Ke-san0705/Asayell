@@ -76,6 +76,24 @@ async function expectNoHorizontalOverflow(page: Page) {
   })).toBe(true)
 }
 
+test('registration shows first-year employee examples without filling the title', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'pages', 'Checks the registration form in this checkout')
+  await page.goto('/Asayell/')
+
+  const titleInput = page.getByRole('textbox', { name: /夢・目標・楽しみ/ })
+  await expect(titleInput).toBeVisible()
+  await expect(titleInput).toHaveValue('')
+  await expect(titleInput).toHaveAttribute('placeholder', '例：先輩に質問できるようになる')
+  const examples = page.getByRole('list', { name: '目標の入力例' })
+  await expect(examples.getByRole('listitem')).toHaveText([
+    '初めての商談、緊張するけど頑張る',
+    '朝の満員電車に負けずに出社する',
+    '先輩に質問できるようになる',
+  ])
+  await expect(examples).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+})
+
 test('T01–T06: register, share, post and receive', async ({ page, context, browser }, testInfo) => {
   const pages = testInfo.project.name === 'pages'
   const remote = testInfo.project.name !== 'local'
