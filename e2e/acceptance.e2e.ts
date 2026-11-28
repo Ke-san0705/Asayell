@@ -326,3 +326,185 @@ test('primary navigation and device profile manage a registered goal', async ({ 
     await visitor.close()
   }
 })
+
+test('R3-04: public registration reaches a separate browser and the owner inbox', async (
+  { page, context, browser, baseURL }, testInfo,
+) => {
+  test.skip(testInfo.project.name === 'local', 'Separate devices require the Supabase repository.')
+  const pages = testInfo.project.name === 'pages'
+  if (pages) test.setTimeout(300_000)
+
+  const start = pages ? Date.now() : Date.parse('2026-11-28T20:00:00+09:00')
+  const wakeAt = Math.floor(start / 60_000) * 60_000 + 3 * 60_000
+  const wakeTime = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit',
+  }).format(wakeAt)
+  const goalTitle = 'R3-04 統合テスト ' + crypto.randomUUID()
+  const body = 'R3-04 統合テスト用のエールです。'
+  let now = start
+  const fixture = pages ? undefined : createSupabaseFixture(() => now)
+  await fixture?.install(context)
+  const visitor = await browser.newContext({ baseURL, viewport: page.viewportSize() })
+  let ownerUrl: string | undefined
+  let posted = false
+  let hidden = false
+  let withdrawn = false
+
+  try {
+    await fixture?.install(visitor)
+    const visitorPage = await visitor.newPage()
+    if (fixture) {
+      await page.clock.setFixedTime(start)
+      await visitorPage.clock.setFixedTime(start)
+    }
+
+    const nav = page.getByRole('navigation', { name: 'メインナビゲーション' })
+    const visitorNav = visitorPage.getByRole('navigation', { name: 'メインナビゲーション' })
+    const card = visitorPage.getByRole('article').filter({
+      has: visitorPage.getByRole('heading', { name: goalTitle, exact: true }),
+    })
+
+    await page.goto('/Asayell/')
+    const visibility = page.getByRole('checkbox', { name: 'みんなに公開する' })
+    await expect(visibility).not.toBeChecked()
+    await page.getByLabel('ニックネーム').fill('R3-04 動作確認')
+    await page.getByLabel('夢・目標・楽しみ').fill(goalTitle)
+    await page.getByLabel('起床予定時刻').fill(wakeTime)
+    await visibility.check()
+    const created = page.waitForRequest(request =>
+      new URL(request.url()).pathname === rpcPath + 'asayell_create_goal',
+    )
+    await page.getByRole('button', { name: '目標を登録する' }).click()
+    const { p_support_token: supportToken, p_owner_token: ownerToken, p_is_public: isPublic } =
+      (await created).postDataJSON()
+    ownerUrl = new URL('/Asayell/o/' + ownerToken, baseURL).href
+    expect(isPublic).toBe(true)
+    await expect(page.getByRole('link', { name: '本人専用の受信URLを開く' })).toHaveAttribute('href', ownerUrl)
+
+    await visitorPage.goto('/Asayell/me')
+    await expect(visitorPage.getByText(/このブラウザには登録した夢の控えがありません/)).toBeVisible()
+
+    async function checkFeed(count: number | null) {
+      const feed = waitForRpc(visitorPage, 'asayell_list_public_goals')
+      await visitorNav.getByRole('link', { name: 'みんなの夢' }).click()
+      const response = await feed
+      expect(response.ok()).toBe(true)
+      const goals = (await response.json()) as Record<string, unknown>[]
+      for (const goal of goals) {
+        expect(Object.keys(goal).sort()).toEqual([
+          'detail', 'message_count', 'nickname', 'support_token', 'title', 'wake_at',
+        ])
+      }
+      const ours = goals.find(goal => goal.support_token === supportToken)
+      if (count === null) {
+        expect(ours).toBeUndefined()
+        await expect(card).toHaveCount(0)
+      } else {
+        expect(ours).toMatchObject({ title: goalTitle, message_count: count })
+        await expect(card.getByText('届いた応援 ' + count + '件')).toBeVisible()
+      }
+    }
+
+    await checkFeed(0)
+    const supporterGoal = waitForRpc(visitorPage, 'asayell_get_goal_for_support')
+    await card.getByRole('link', { name: '応援する' }).click()
+    const supportResponse = await supporterGoal
+    expect(supportResponse.ok()).toBe(true)
+    expect(await supportResponse.json()).toEqual([{
+      nickname: 'R3-04 動作確認', title: goalTitle, detail: null, wake_at: expect.any(String),
+    }])
+    await expect(visitorNav).toHaveCount(0)
+    await visitorPage.getByLabel('メッセージ本文').fill(body)
+    const postedMessage = waitForRpc(visitorPage, 'asayell_post_message')
+    await visitorPage.getByRole('button', { name: 'エールを投稿する' }).click()
+    const postResponse = await postedMessage
+    posted = postResponse.ok() && await postResponse.json() === true
+    expect(posted).toBe(true)
+    await expect(visitorPage.getByRole('status')).toContainText('翌朝に届きます')
+    await visitorPage.reload()
+    await expect(visitorPage.getByLabel('メッセージ本文')).toBeEmpty()
+    await expect(visitorPage.getByRole('blockquote')).toHaveCount(0)
+
+    await page.goto('/Asayell/')
+    await nav.getByRole('link', { name: 'みんなの夢' }).click()
+    await expect(page.getByRole('heading', { name: 'みんなの夢', exact: true })).toBeVisible()
+    const ownerGoal = waitForRpc(page, 'asayell_get_owner_goal')
+    await nav.getByRole('link', { name: 'プロフィール' }).click()
+    const ownerResponse = await ownerGoal
+    expect(ownerResponse.ok()).toBe(true)
+    expect(await ownerResponse.json(), 'asayell_get_owner_goal must return is_public').toMatchObject([
+      { title: goalTitle, is_public: true, is_unlocked: false, message_count: 1 },
+    ])
+    const profile = page.getByRole('article').filter({ hasText: goalTitle })
+    await expect(profile.getByText('届いた応援 1件')).toBeVisible()
+    await expect(profile.locator('time')).toBeVisible()
+    await expect(profile.getByRole('link')).toHaveAttribute('href', new URL('/Asayell/s/' + supportToken, baseURL).href)
+    const toggle = profile.getByRole('checkbox', { name: 'みんなの夢に公開' })
+    await expect(toggle).toBeChecked()
+    await profile.getByRole('button', { name: '受信画面を開く' }).click()
+    await expect(page).toHaveURL(ownerUrl)
+    await expect(page.getByText(/明日の朝にエールが届きます/)).toBeVisible()
+    await expect(page.getByText(body, { exact: true })).toHaveCount(0)
+
+    await visitorPage.goto('/Asayell/')
+    await checkFeed(1)
+    const withdraw = waitForRpc(page, 'asayell_set_public')
+    await visibility.click()
+    await expect(visibility).not.toBeChecked()
+    expect(await (await withdraw).json()).toBe(true)
+    withdrawn = true
+    await visitorNav.getByRole('link', { name: '投稿' }).click()
+    await checkFeed(null)
+
+    if (fixture) {
+      now = wakeAt
+      fixture.unlock()
+      await page.clock.setFixedTime(now)
+      await visitorPage.clock.setFixedTime(now)
+    }
+    await page.reload()
+    await expect(page.getByRole('blockquote')).toHaveText(body, { timeout: pages ? 195_000 : 5_000 })
+    await expect(page.getByText('デモモードで表示しています')).toHaveCount(0)
+    await page.getByRole('button', { name: '隠す' }).click()
+    await expect(page.getByText('0件', { exact: true })).toBeVisible()
+    hidden = true
+    await page.reload()
+    await expect(page.getByText('0件', { exact: true })).toBeVisible()
+    await expect(page.getByRole('blockquote')).toHaveCount(0)
+
+    // The RPC must exclude an expired goal even when its public flag is ON.
+    const republish = waitForRpc(page, 'asayell_set_public')
+    withdrawn = false
+    await visibility.click()
+    await expect(visibility).toBeChecked()
+    expect(await (await republish).json()).toBe(true)
+    await visitorNav.getByRole('link', { name: '投稿' }).click()
+    await checkFeed(null)
+
+    await page.getByRole('link', { name: 'みんなの夢を見る' }).click()
+    await nav.getByRole('link', { name: '投稿' }).click()
+    await expect(page.getByRole('heading', { name: '目標登録' })).toBeVisible()
+  } finally {
+    await visitor.close()
+    if (ownerUrl && (!withdrawn || posted && !hidden)) {
+      await page.goto(ownerUrl)
+      if (!withdrawn) {
+        const toggle = page.getByRole('checkbox', { name: 'みんなに公開する' })
+        await expect(toggle).toBeVisible()
+        if (await toggle.isChecked()) {
+          const cleanup = waitForRpc(page, 'asayell_set_public')
+          await toggle.click()
+          await expect(toggle).not.toBeChecked()
+          expect(await (await cleanup).json()).toBe(true)
+        }
+      }
+      if (posted && !hidden) {
+        const demo = page.getByRole('button', { name: 'デモ：翌朝を体験する' })
+        await expect(page.getByRole('blockquote').or(demo)).toBeVisible()
+        if (await demo.isVisible()) await demo.click()
+        await page.getByRole('button', { name: '隠す' }).click()
+        await expect(page.getByText('0件', { exact: true })).toBeVisible()
+      }
+    }
+  }
+})
