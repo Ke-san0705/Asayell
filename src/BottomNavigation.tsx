@@ -1,7 +1,7 @@
 import type { Route } from './routes'
 
 const destinations = [
-  { name: 'register', path: '', icon: '✎', label: '投稿' },
+  { name: 'register', path: '', icon: '✏️', label: '投稿' },
   { name: 'feed', path: 'feed', icon: '☀', label: 'みんなの夢' },
   { name: 'profile', path: 'me', icon: '👤', label: 'プロフィール' },
 ] as const
