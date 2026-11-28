@@ -49,7 +49,9 @@ begin
 end;
 $$;
 
--- Support view now includes the category.
+-- Support view now includes the category (return type changes, so drop first).
+drop function if exists public.asayell_get_goal_for_support(text);
+
 create or replace function public.asayell_get_goal_for_support(
   p_support_token text
 ) returns table (
