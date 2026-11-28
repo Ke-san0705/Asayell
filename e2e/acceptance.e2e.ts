@@ -505,6 +505,24 @@ test('R4-04: categorized registration reaches a separate browser and the owner i
     await expect(profile).not.toContainText(ownerUrl)
     await expect(profile.getByRole('button', { name: '応援募集URLをコピー' })).toBeVisible()
 
+    if (fixture) {
+      await expect(profile).toHaveCount(1)
+      const storageState = await context.storageState()
+      for (const origin of storageState.origins) {
+        origin.localStorage = origin.localStorage.filter(({ name }) => name === 'asayell:device-id')
+      }
+      const sameDevice = await browser.newContext({ baseURL, storageState })
+      try {
+        await fixture.install(sameDevice)
+        const devicePage = await sameDevice.newPage()
+        await devicePage.goto('/Asayell/me')
+        const deviceGoal = devicePage.getByRole('article').filter({ hasText: goalTitle })
+        await expect(deviceGoal.getByRole('button', { name: '受信画面を開く' })).toBeVisible()
+      } finally {
+        await sameDevice.close()
+      }
+    }
+
     await visitorPage.goto('/Asayell/me')
     await expect(visitorPage.getByText(/このブラウザには登録した夢の控えがありません/)).toBeVisible()
 

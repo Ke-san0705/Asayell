@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest'
 import { SupabaseRepository } from './supabaseRepository'
 
-it('registers, shares and receives across browsers using only token-scoped RPCs', async () => {
+it('shares and receives across browsers and merges device goals with legacy receipts', async () => {
   const url = 'https://example.supabase.co'
   const input = { nickname: 'あさ', title: '散歩', category: 'dream' as const, wake_at: '2026-11-29T07:00:00+09:00' }
   const body = '応援しています'
@@ -33,6 +33,10 @@ it('registers, shares and receives across browsers using only token-scoped RPCs'
     .mockResolvedValueOnce(response([{ ...input, detail: null, message_count: 1, is_unlocked: false, is_public: true }]))
     .mockResolvedValueOnce(response([]))
     .mockResolvedValueOnce(response([{ id: 'message-id', sender: null, body, created_at: input.wake_at }]))
+    .mockResolvedValueOnce(response([
+      { title: '端末から登録した夢', wake_at: input.wake_at, is_public: true, category: 'fun', message_count: 2,
+        support_token: 'device-support', owner_token: 'device-owner' },
+    ]))
     .mockResolvedValueOnce(response([{ ...input, detail: null, message_count: 1, is_unlocked: false, is_public: true }]))
 
   const owner = new SupabaseRepository(url, 'anon', storage, rpc)
@@ -48,9 +52,30 @@ it('registers, shares and receives across browsers using only token-scoped RPCs'
   expect(await owner.listOwnerMessages(goal.owner_token, true)).toEqual([
     { message_id: 'message-id', sender: undefined, body, created_at: input.wake_at },
   ])
-  expect(await owner.listOwnerGoals()).toMatchObject([{
-    goalId: goal.goal_id, ownerToken: goal.owner_token, title: goal.title, messageCount: 1,
-  }])
+  const goals = await owner.listOwnerGoals()
+  expect(goals).toEqual([
+    { ownerToken: 'device-owner', supportToken: 'device-support', title: '端末から登録した夢',
+      wakeAt: input.wake_at, isPublic: true, category: 'fun', messageCount: 2 },
+    { goalId: goal.goal_id, ownerToken: goal.owner_token, supportToken: goal.support_token, title: goal.title,
+      wakeAt: input.wake_at, isPublic: true, category: input.category, messageCount: 1 },
+  ])
+
+  const deviceOnlyRpc = vi.fn<typeof fetch>().mockResolvedValueOnce(response([
+    { title: goal.title, wake_at: input.wake_at, is_public: false, category: input.category, message_count: 3,
+      support_token: goal.support_token, owner_token: goal.owner_token },
+  ]))
+  const reopened = new SupabaseRepository(url, 'anon', storage, deviceOnlyRpc)
+  expect(await reopened.listOwnerGoals()).toEqual([
+    { ownerToken: goal.owner_token, supportToken: goal.support_token, title: goal.title,
+      wakeAt: input.wake_at, isPublic: false, category: input.category, messageCount: 3 },
+  ])
+  expect(deviceOnlyRpc).toHaveBeenCalledTimes(1)
+
+  const beforeMigration = vi.fn<typeof fetch>()
+    .mockResolvedValueOnce(new Response(null, { status: 404 }))
+    .mockResolvedValueOnce(response([{ ...input, is_public: true, message_count: 1 }]))
+  const legacyRepository = new SupabaseRepository(url, 'anon', storage, beforeMigration)
+  expect(await legacyRepository.listOwnerGoals()).toEqual([goals[1]])
 
   expect(creation.mock.calls[0][0]).toBe(url + '/rest/v1/rpc/asayell_create_goal')
   expect(rpc.mock.calls.map(([path, options]) => {
@@ -66,6 +91,7 @@ it('registers, shares and receives across browsers using only token-scoped RPCs'
     [url + '/rest/v1/rpc/asayell_get_owner_goal', { p_owner_token: goal.owner_token }],
     [url + '/rest/v1/rpc/asayell_get_owner_messages', { p_owner_token: goal.owner_token, p_demo: false }],
     [url + '/rest/v1/rpc/asayell_get_owner_messages', { p_owner_token: goal.owner_token, p_demo: true }],
+    [url + '/rest/v1/rpc/asayell_list_my_goals', { p_device_id: expect.stringMatching(/^[a-f0-9]{32}$/) }],
     [url + '/rest/v1/rpc/asayell_get_owner_goal', { p_owner_token: goal.owner_token }],
   ])
 })

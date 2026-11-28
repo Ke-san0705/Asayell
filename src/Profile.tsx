@@ -164,7 +164,7 @@ function ProfileGoals({ repository }: { repository: AsayellRepository }) {
 
   return (
     <div className="share-options">
-      {profile.goals.map((goal) => <ProfileCard key={goal.goalId} goal={goal} repository={repository} />)}
+      {profile.goals.map((goal) => <ProfileCard key={goal.ownerToken} goal={goal} repository={repository} />)}
     </div>
   )
 }

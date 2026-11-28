@@ -21,6 +21,7 @@ type MessageRow = { id: string; body: string | null; sender: string | null; crea
 export function createSupabaseFixture(now = Date.now) {
   const profiles = new Map<string, { account_name: string }>()
   let goal: GoalRow | undefined
+  let ownerDeviceId: string | null
   const messages: MessageRow[] = []
   let unlocked = false
 
@@ -58,14 +59,17 @@ export function createSupabaseFixture(now = Date.now) {
             break
           }
           case rpcPath + 'asayell_create_goal': {
+            expect(args.p_device_id).toMatch(/^[0-9a-f]{32}$/)
+            expect(args.p_nickname).toBeNull()
             const profile = profiles.get(args.p_device_id!)
-            if (args.p_device_id && !profile) {
+            if (!profile) {
               await route.fulfill({ status: 400, json: { message: 'profile not found for device' } })
               break
             }
+            ownerDeviceId = args.p_device_id
             goal = {
               id: 'e2e-goal',
-              nickname: profile?.account_name ?? args.p_nickname,
+              nickname: profile.account_name,
               title: args.p_title,
               detail: args.p_detail,
               wake_at: args.p_wake_at!,
@@ -75,6 +79,18 @@ export function createSupabaseFixture(now = Date.now) {
               is_public: args.p_is_public ?? false,
             }
             await route.fulfill({ json: goal })
+            break
+          }
+          case rpcPath + 'asayell_list_my_goals': {
+            expect(args.p_device_id).toMatch(/^[0-9a-f]{32}$/)
+            if (!goal || ownerDeviceId !== args.p_device_id) {
+              await route.fulfill({ json: [] })
+              break
+            }
+            const { title, wake_at, is_public, category, support_token, owner_token } = goal
+            await route.fulfill({ json: [
+              { title, wake_at, is_public, category, support_token, owner_token, message_count: messages.length },
+            ] })
             break
           }
           case rpcPath + 'asayell_list_public_goals':
