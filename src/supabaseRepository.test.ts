@@ -166,3 +166,25 @@ it('uses the same device ID for profile RPCs and account-based goal creation', a
   })).toEqual(['get_profile', 'create_goal', 'upsert_profile', 'get_profile', 'create_goal']
     .map(name => url + '/rest/v1/rpc/asayell_' + name))
 })
+
+it('uses the survey RPCs with owner token, phase, demo flag and post-only intent', async () => {
+  const url = 'https://example.supabase.co'
+  const rpc = vi.fn<typeof fetch>()
+    .mockResolvedValueOnce(Response.json('ok'))
+    .mockResolvedValueOnce(Response.json('ok'))
+    .mockResolvedValueOnce(Response.json([{ phase: 'pre' }, { phase: 'post' }]))
+  const repository = new SupabaseRepository(url, 'anon', undefined, rpc)
+  const scores = { q1: 1, q2: 3, q3: 5, consent: true }
+
+  await repository.saveSurveyResponse('owner', { ...scores, phase: 'pre', isDemo: true })
+  await repository.saveSurveyResponse('owner', { ...scores, phase: 'post', isDemo: false, continueIntent: 4 })
+  expect(await repository.getSurveyStatus('owner')).toEqual(['pre', 'post'])
+
+  const path = url + '/rest/v1/rpc/'
+  const payload = { p_owner_token: 'owner', p_q1: 1, p_q2: 3, p_q3: 5, p_consent: true }
+  expect(rpc.mock.calls.map(([request, options]) => [request, JSON.parse(String(options?.body))])).toEqual([
+    [path + 'asayell_save_survey_response', { ...payload, p_phase: 'pre', p_is_demo: true, p_continue_intent: null }],
+    [path + 'asayell_save_survey_response', { ...payload, p_phase: 'post', p_is_demo: false, p_continue_intent: 4 }],
+    [path + 'asayell_get_survey_status', { p_owner_token: 'owner' }],
+  ])
+})

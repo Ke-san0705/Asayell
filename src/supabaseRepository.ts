@@ -1,7 +1,8 @@
 import {
-  createGoalTokens, defaultGoalCategory, getOrCreateDeviceId, normalizeAccountName, toProfileGoal, validateGoal, validateMessageBody,
+  createGoalTokens, defaultGoalCategory, getOrCreateDeviceId, normalizeAccountName, toProfileGoal, validateGoal, validateMessageBody, validateSurveyResponse,
   type AsayellRepository, type CreateGoalInput, type Goal, type GoalInput, type InboxMessage,
   type OwnerGoal, type Profile, type ProfileGoal, type PublicGoal, type RepositoryStorage, type StoredGoal, type SupportGoal, type SupportMessageInput,
+  type SurveyPhase, type SurveyResponse,
 } from './repository'
 
 type ProfileRow = { account_name: string }
@@ -189,6 +190,27 @@ export class SupabaseRepository implements AsayellRepository {
       p_body: input.body,
     })
     if (posted !== true) throw new Error('エールを投稿できませんでした。')
+  }
+
+  async saveSurveyResponse(ownerToken: string, response: SurveyResponse): Promise<void> {
+    validateSurveyResponse(response)
+    await this.rpc<string>('asayell_save_survey_response', {
+      p_owner_token: ownerToken,
+      p_phase: response.phase,
+      p_is_demo: response.isDemo,
+      p_q1: response.q1,
+      p_q2: response.q2,
+      p_q3: response.q3,
+      p_continue_intent: response.phase === 'post' ? response.continueIntent : null,
+      p_consent: response.consent,
+    })
+  }
+
+  async getSurveyStatus(ownerToken: string): Promise<SurveyPhase[]> {
+    const rows = await this.rpc<{ phase: SurveyPhase }[]>('asayell_get_survey_status', {
+      p_owner_token: ownerToken,
+    })
+    return rows.map(({ phase }) => phase)
   }
 
   async listOwnerMessages(ownerToken: string, demo = false): Promise<InboxMessage[]> {

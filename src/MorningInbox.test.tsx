@@ -55,6 +55,9 @@ it('waits to fetch messages until the scheduled instant and shows one at a time'
 
   await act(async () => vi.advanceTimersByTimeAsync(1))
   expect(container.textContent).toContain('おはようございます')
+  expect(container.textContent).toContain('受信前アンケート')
+  expect(container.querySelector('blockquote')).toBeNull()
+  await press('回答せずにエールを読む')
   expect(container.textContent).toContain('2件')
   expect(container.textContent).toContain('一通目のエール')
   expect(container.textContent).toContain('はる')
@@ -72,12 +75,16 @@ it('waits to fetch messages until the scheduled instant and shows one at a time'
   await next()
   expect(container.textContent).not.toContain('二通目のエール')
   expect(container.textContent).toContain('すべてのエールを読み終えました')
+  expect(await repository.getSurveyStatus(goal.owner_token)).toEqual([])
+  expect(container.textContent).toContain('受信後アンケート')
+  await press('回答せずに終了する')
   expect(container.querySelector('button')).toBeNull()
 })
 
 it('shows the fixed encouragement and no message controls when the inbox is empty', async () => {
   const goal = await createGoal()
   await open('/Asayell/o/' + goal.owner_token)
+  await press('回答せずにエールを読む')
   expect(container.textContent).toContain('0件')
   expect(container.textContent).toContain('今日も自分のペースで')
   expect(container.querySelector('blockquote, .inbox-action')).toBeNull()
@@ -124,6 +131,7 @@ it('previews real messages one at a time and closes the preview before wake-up',
   await press('デモ：翌朝を体験する')
   expect(listMessages).toHaveBeenCalledExactlyOnceWith(goal.goal_id)
   expect(container.textContent).toContain('デモモードで表示しています')
+  await press('回答せずにエールを読む')
   expect(container.querySelector('blockquote')?.textContent).toBe('最初のエール')
   expect(container.textContent).not.toContain('次のエール')
 
@@ -136,6 +144,7 @@ it('previews real messages one at a time and closes the preview before wake-up',
   expect(listMessages).toHaveBeenCalledTimes(1)
 
   await act(async () => vi.advanceTimersByTimeAsync(60_000))
+  await press('回答せずにエールを読む')
   expect(container.querySelector('blockquote')?.textContent).toBe('最初のエール')
   expect(listMessages).toHaveBeenCalledTimes(2)
 })
@@ -147,6 +156,7 @@ it('keeps the demo identified for an empty inbox and lets the owner return', asy
 
   await press('デモ：翌朝を体験する')
   expect(container.textContent).toContain('デモモードで表示しています')
+  await press('回答せずにエールを読む')
   expect(container.textContent).toContain('0件')
   expect(container.textContent).toContain('今日も自分のペースで')
   expect(container.querySelector('blockquote')).toBeNull()
@@ -183,7 +193,7 @@ it('saves the owner visibility toggle and hides the current message', async () =
   await repository.createMessage({ goal_id: goal.goal_id, body: '残すエール' })
   await open(path)
 
-  const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]')
+  const checkbox = container.querySelector<HTMLInputElement>('.inbox-visibility input')
   expect(checkbox?.checked).toBe(false)
   await act(async () => checkbox!.click())
   expect(checkbox?.checked).toBe(true)
@@ -191,6 +201,7 @@ it('saves the owner visibility toggle and hides the current message', async () =
   await act(async () => checkbox!.click())
   expect(checkbox?.checked).toBe(false)
 
+  await press('回答せずにエールを読む')
   await press('隠す')
   expect(container.querySelector('blockquote')?.textContent).toBe('残すエール')
   expect(container.textContent).toContain('1件')
@@ -212,12 +223,107 @@ it('keeps a demo hide in effect when the inbox loads at wake-up during the reque
   })
   await open('/Asayell/o/' + goal.owner_token)
   await press('デモ：翌朝を体験する')
+  await press('回答せずにエールを読む')
   await press('隠す')
   await act(async () => vi.advanceTimersByTimeAsync(60_000))
   const exit = [...container.querySelectorAll('button')].find((button) => button.textContent === 'デモを終了する')
   expect(exit?.disabled).toBe(true)
   await act(async () => finishHide())
   await press('デモを終了する')
+  await press('回答せずにエールを読む')
   expect(container.textContent).toContain('0件')
   expect(container.textContent).not.toContain(message.body)
+})
+
+async function answer(values: number[]) {
+  const form = container.querySelector('form')!
+  const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]')!
+  expect(form.querySelectorAll('fieldset')).toHaveLength(values.length)
+  await act(async () => {
+    form.querySelectorAll('fieldset').forEach((group, index) => {
+      group.querySelector<HTMLInputElement>('input[value="' + values[index] + '"]')!.click()
+    })
+  })
+  expect(submit.disabled).toBe(true)
+  await act(async () => form.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click())
+  expect(submit.disabled).toBe(false)
+  await act(async () => submit.click())
+}
+
+it.each([false, true])('saves consented pre and post responses and omits answered phases (demo=%s)', async (isDemo) => {
+  if (isDemo) vi.setSystemTime(Date.parse(wakeAt) - 60_000)
+  const goal = await createGoal()
+  const path = '/Asayell/o/' + goal.owner_token
+  await repository.createMessage({ goal_id: goal.goal_id, body: '朝のエール' })
+  const save = vi.spyOn(repository, 'saveSurveyResponse')
+
+  async function openInbox() {
+    await open(path)
+    if (isDemo) await press('デモ：翌朝を体験する')
+  }
+
+  await openInbox()
+  expect(container.querySelector('blockquote')).toBeNull()
+  await answer([1, 2, 3])
+  expect(save).toHaveBeenNthCalledWith(1, goal.owner_token, {
+    phase: 'pre', isDemo, q1: 1, q2: 2, q3: 3, consent: true,
+  })
+  expect(container.querySelector('blockquote')?.textContent).toBe('朝のエール')
+  expect(container.textContent).not.toContain('受信後アンケート')
+  await press('次へ')
+  await answer([2, 3, 4, 5])
+  expect(save).toHaveBeenNthCalledWith(2, goal.owner_token, {
+    phase: 'post', isDemo, q1: 2, q2: 3, q3: 4, continueIntent: 5, consent: true,
+  })
+
+  await open('/Asayell/')
+  if (isDemo) vi.setSystemTime(new Date(wakeAt))
+  await open(path)
+  expect(container.textContent).not.toContain('受信前アンケート')
+  expect(container.querySelector('blockquote')?.textContent).toBe('朝のエール')
+  await press('次へ')
+  expect(container.textContent).not.toContain('受信後アンケート')
+  expect(await repository.getSurveyStatus(goal.owner_token)).toEqual(['pre', 'post'])
+  expect(save).toHaveBeenCalledTimes(2)
+})
+
+it('lets the owner skip while survey status is pending and keeps the message available on failure', async () => {
+  const goal = await createGoal()
+  await repository.createMessage({ goal_id: goal.goal_id, body: '朝のエール' })
+  let failStatus!: (error: Error) => void
+  vi.spyOn(repository, 'getSurveyStatus').mockReturnValueOnce(new Promise((_, reject) => { failStatus = reject }))
+
+  await open('/Asayell/o/' + goal.owner_token)
+  expect(container.querySelector('blockquote')).toBeNull()
+  await press('回答せずにエールを読む')
+  await act(async () => failStatus(new Error('Survey RPC unavailable')))
+  expect(container.querySelector('blockquote')?.textContent).toBe('朝のエール')
+  await press('次へ')
+  expect(container.textContent).not.toContain('受信後アンケート')
+})
+
+it('checks survey status after an in-flight demo save when entering the real inbox', async () => {
+  vi.setSystemTime(Date.parse(wakeAt) - 60_000)
+  const goal = await createGoal()
+  await repository.createMessage({ goal_id: goal.goal_id, body: '朝のエール' })
+
+  let finishSave!: () => void
+  const pending = new Promise<void>((resolve) => { finishSave = resolve })
+  const save = repository.saveSurveyResponse.bind(repository)
+  vi.spyOn(repository, 'saveSurveyResponse').mockImplementationOnce(async (...args) => {
+    await pending
+    await save(...args)
+  })
+
+  await open('/Asayell/o/' + goal.owner_token)
+  await press('デモ：翌朝を体験する')
+  await answer([1, 2, 3])
+  await act(async () => vi.advanceTimersByTimeAsync(60_000))
+  await press('デモを終了する')
+  expect(container.textContent).not.toContain('受信前アンケート')
+  expect(container.querySelector('blockquote')).toBeNull()
+
+  await act(async () => finishSave())
+  expect(container.textContent).not.toContain('受信前アンケート')
+  expect(container.querySelector('blockquote')?.textContent).toBe('朝のエール')
 })
