@@ -34,7 +34,7 @@ a:focus-visible {
 .shell {
   width: min(100%, 38rem);
   margin-inline: auto;
-  padding: clamp(0.75rem, 3vw, 1.5rem) clamp(0.875rem, 4vw, 2rem) 3rem;
+  padding: clamp(0.75rem, 3vw, 1.5rem) clamp(0.875rem, 4vw, 2rem);
 }
 
 .brand {
@@ -421,7 +421,6 @@ h1 {
 
 .public-feed {
   padding-top: env(safe-area-inset-top);
-  padding-bottom: calc(var(--bottom-navigation-height) + 1rem);
 }
 
 .feed-header {
@@ -496,11 +495,10 @@ h1 {
   width: min(calc(100% - 2rem), 34rem);
 }
 
-
-.shell-with-navigation {
+.shell,
+.public-feed {
   padding-bottom: calc(var(--bottom-navigation-height) + 1rem);
 }
-
 
 .bottom-navigation {
   position: fixed;

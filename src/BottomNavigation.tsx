@@ -1,10 +1,12 @@
+import type { Route } from './routes'
+
 const destinations = [
   { name: 'register', path: '', icon: '✎', label: '投稿' },
   { name: 'feed', path: 'feed', icon: '☀', label: 'みんなの夢' },
   { name: 'profile', path: 'me', icon: '👤', label: 'プロフィール' },
 ] as const
 
-export function BottomNavigation({ current }: { current: typeof destinations[number]['name'] }) {
+export function BottomNavigation({ current }: { current: Route['name'] }) {
   return (
     <nav className="bottom-navigation" aria-label="メインナビゲーション">
       <ul>

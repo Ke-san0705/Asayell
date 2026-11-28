@@ -358,9 +358,17 @@ test('primary navigation and device profile manage a registered goal', async ({ 
   const supportBox = (await support.boundingBox())!
   expect(supportBox.y + supportBox.height).toBeLessThanOrEqual(navBox.y)
   await support.click()
-  await expect(nav).toHaveCount(0)
+  await expect(nav).toBeVisible()
   await page.getByLabel('メッセージ本文').fill(message)
-  await page.getByRole('button', { name: 'エールを投稿する' }).click()
+  await page.setViewportSize({ width: 320, height: 420 })
+  const submit = page.getByRole('button', { name: 'エールを投稿する' })
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+  const submitBox = (await submit.boundingBox())!
+  const supportNavBox = (await nav.boundingBox())!
+  expect(submitBox.y).toBeGreaterThanOrEqual(0)
+  expect(submitBox.y + submitBox.height).toBeLessThanOrEqual(supportNavBox.y)
+  await page.setViewportSize({ width: 320, height: 780 })
+  await submit.click()
   await expect(page.getByRole('status')).toContainText('翌朝に届きます')
 
   const ownerMessages: string[] = []
@@ -409,6 +417,7 @@ test('primary navigation and device profile manage a registered goal', async ({ 
   await expect(toggle).not.toBeChecked()
   await page.getByRole('button', { name: '受信画面を開く' }).click()
   await expect(page).toHaveURL(ownerUrl)
+  await expect(nav).toBeVisible()
 
   const visitor = await browser.newContext()
   try {
@@ -524,7 +533,7 @@ test('R4-04: categorized registration reaches a separate browser and the owner i
     expect(await supportResponse.json()).toEqual([{
       nickname: 'R4-04 動作確認', title: goalTitle, detail: null, wake_at: expect.any(String), category: 'fun',
     }])
-    await expect(visitorNav).toHaveCount(0)
+    await expect(visitorNav).toBeVisible()
     await visitorPage.getByLabel('メッセージ本文').fill(body)
     const postedMessage = waitForRpc(visitorPage, 'asayell_post_message')
     await visitorPage.getByRole('button', { name: 'エールを投稿する' }).click()

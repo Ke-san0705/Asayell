@@ -26,46 +26,42 @@ interface AppProps {
 }
 
 export function App({ route, repository }: AppProps) {
-  if (route.name === 'feed') return (
-    <>
-      <PublicFeed repository={repository} />
-      <BottomNavigation current="feed" />
-    </>
-  )
-
   const navigationTab = route.name === 'share' ? 'register' : route.name
-  const hasNavigation = navigationTab === 'register' || navigationTab === 'profile'
 
   return (
     <RepositoryContext value={repository}>
-      <div className={hasNavigation ? 'shell shell-with-navigation' : 'shell'}>
-        <header>
-          <a className="brand" href={import.meta.env.BASE_URL}>アサエール</a>
-        </header>
-        <main className="card">
-          <h1>{screens[route.name]}</h1>
-          {route.name === 'register' && <GoalRegistration repository={repository} />}
-          {route.name === 'profile' && <Profile repository={repository} />}
-          {route.name === 'share' && <GoalShare key={route.goalId} repository={repository} goalId={route.goalId} />}
-          {route.name === 'owner' && (
-            <MorningInbox key={route.ownerToken} ownerToken={route.ownerToken} repository={repository} />
-          )}
-          {route.name === 'support' && (
-            <SupportPost
-              key={route.supportToken}
-              repository={repository}
-              supportToken={route.supportToken}
-            />
-          )}
-          {route.name === 'owner' && (
-            <a href={import.meta.env.BASE_URL + 'feed'}>みんなの夢を見る</a>
-          )}
-          {route.name === 'notFound' && (
-            <a className="action secondary recovery-action" href={import.meta.env.BASE_URL}>目標登録へ戻る</a>
-          )}
-        </main>
-      </div>
-      {hasNavigation && <BottomNavigation current={navigationTab} />}
+      {route.name === 'feed' ? (
+        <PublicFeed repository={repository} />
+      ) : (
+        <div className="shell">
+          <header>
+            <a className="brand" href={import.meta.env.BASE_URL}>アサエール</a>
+          </header>
+          <main className="card">
+            <h1>{screens[route.name]}</h1>
+            {route.name === 'register' && <GoalRegistration repository={repository} />}
+            {route.name === 'profile' && <Profile repository={repository} />}
+            {route.name === 'share' && <GoalShare key={route.goalId} repository={repository} goalId={route.goalId} />}
+            {route.name === 'owner' && (
+              <MorningInbox key={route.ownerToken} ownerToken={route.ownerToken} repository={repository} />
+            )}
+            {route.name === 'support' && (
+              <SupportPost
+                key={route.supportToken}
+                repository={repository}
+                supportToken={route.supportToken}
+              />
+            )}
+            {route.name === 'owner' && (
+              <a href={import.meta.env.BASE_URL + 'feed'}>みんなの夢を見る</a>
+            )}
+            {route.name === 'notFound' && (
+              <a className="action secondary recovery-action" href={import.meta.env.BASE_URL}>目標登録へ戻る</a>
+            )}
+          </main>
+        </div>
+      )}
+      <BottomNavigation current={navigationTab} />
     </RepositoryContext>
   )
 }
