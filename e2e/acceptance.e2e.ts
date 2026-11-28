@@ -12,9 +12,9 @@ function waitForRpc(page: Page, name: string) {
 
 async function expectRegistrationCategories(page: Page, category?: '夢' | '楽しみ') {
   await expect(page.getByRole('radio', { name: '目標', exact: true })).toBeChecked()
-  await expect(page.getByLabel('詳細')).toHaveAttribute(
-    'placeholder', '例）まずは布団から出て水を飲む。小さな一歩でOK',
-  )
+  await expect(page.getByLabel('詳細')).toHaveCount(0)
+  await expect(page.getByRole('checkbox', { name: 'みんなに公開する' }))
+    .toHaveAccessibleDescription(/^起床予定時刻まで、ニックネーム・目標タイトル・起床予定が公開されます。/)
   if (category) {
     await page.getByText(category, { exact: true }).click()
     await expect(page.getByRole('radio', { name: category, exact: true })).toBeChecked()
@@ -37,7 +37,6 @@ async function registerGoal(
   await page.getByLabel('ニックネーム').fill(nickname)
   await page.getByLabel('夢・目標・楽しみ').fill(goalTitle)
   await expectRegistrationCategories(page, category)
-  await page.getByLabel('詳細').fill(detail)
   await page.getByLabel('起床予定時刻').fill(wakeTime)
   if (!pages) {
     const visibility = page.getByRole('checkbox', { name: 'みんなに公開する' })
@@ -102,7 +101,6 @@ test('T01–T06: register, share, post and receive', async ({ page, context, bro
     await supportPage.goto(supportUrl)
     await expect(supportPage.getByText(nickname + 'さんの' + (category ?? '目標'))).toBeVisible()
     await expect(supportPage.getByRole('heading', { name: title })).toBeVisible()
-    await expect(supportPage.getByText(detail, { exact: true })).toBeVisible()
     await expectNoHorizontalOverflow(supportPage)
 
     const body = supportPage.getByLabel('メッセージ本文')
@@ -123,7 +121,7 @@ test('T01–T06: register, share, post and receive', async ({ page, context, bro
       const response = await publicGoal
       expect(response.ok()).toBe(true)
       expect(await response.json()).toEqual([{
-        nickname, title, detail, wake_at: expect.any(String), category: category ? 'fun' : 'goal',
+        nickname, title, detail: null, wake_at: expect.any(String), category: category ? 'fun' : 'goal',
       }])
     }
     await expect(body).toBeVisible()
@@ -231,7 +229,6 @@ test('public feed links to support and excludes private or expired goals', async
   await expect(page.getByRole('article').getByText('夢', { exact: true })).toBeVisible()
   await expect(page.getByText(nickname, { exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
-  await expect(page.getByText(detail, { exact: true })).toBeVisible()
   await expect(page.getByText('明日 7:00 起床')).toBeVisible()
   await expect(page.getByText('届いた応援 0件')).toBeVisible()
   await expectNoHorizontalOverflow(page)
@@ -258,6 +255,31 @@ test('public feed links to support and excludes private or expired goals', async
   await page.reload()
   await expect(empty).toBeVisible()
   await expect(support).toHaveCount(0)
+})
+
+test('FIX-1: existing goal details remain visible in the feed and support page', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'local', 'Existing goals are seeded in browser storage.')
+  await page.clock.setFixedTime(new Date('2026-11-28T20:00:00+09:00'))
+  await page.goto('/Asayell/')
+  await page.evaluate(({ nickname, title, detail }) => {
+    localStorage.setItem('asayell:goal:legacy', JSON.stringify({
+      goal_id: 'legacy',
+      nickname,
+      title,
+      detail,
+      wake_at: '2026-11-29T07:00:00+09:00',
+      category: 'dream',
+      isPublic: true,
+      support_token: 'legacy-support',
+      owner_token: 'legacy-owner',
+      created_at: Date.now(),
+    }))
+  }, { nickname, title, detail })
+
+  await page.goto('/Asayell/feed')
+  await expect(page.getByText(detail, { exact: true })).toBeVisible()
+  await page.getByRole('link', { name: '応援する' }).click()
+  await expect(page.getByText(detail, { exact: true })).toBeVisible()
 })
 
 test('R4-04: public feed stacks compact cards newest first', async ({ page }, testInfo) => {

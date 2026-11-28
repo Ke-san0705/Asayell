@@ -4,7 +4,7 @@ import { defaultGoalCategory, goalCategoryLabels, type AsayellRepository, type G
 import { routePath } from './routes'
 
 export function GoalRegistration({ repository }: { repository: AsayellRepository }) {
-  const [fields, setFields] = useState({ nickname: '', title: '', detail: '', time: '' })
+  const [fields, setFields] = useState({ nickname: '', title: '', time: '' })
   const [category, setCategory] = useState<GoalCategory>(defaultGoalCategory)
   const [isPublic, setIsPublic] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -27,7 +27,6 @@ export function GoalRegistration({ repository }: { repository: AsayellRepository
       const goal = await repository.createGoal({
         nickname: fields.nickname.trim(),
         title: fields.title.trim(),
-        detail: fields.detail.trim() || undefined,
         wake_at: nextWakeAt(fields.time),
         category,
         isPublic,
@@ -67,12 +66,6 @@ export function GoalRegistration({ repository }: { repository: AsayellRepository
             value={fields.title} onChange={(event) => update('title', event.target.value)} />
         </label>
         <label>
-          詳細 <span className="hint">（任意・{goalLimits.detail}文字まで）</span>
-          <textarea name="detail" rows={3} maxLength={goalLimits.detail}
-            placeholder="例）まずは布団から出て水を飲む。小さな一歩でOK"
-            value={fields.detail} onChange={(event) => update('detail', event.target.value)} />
-        </label>
-        <label>
           起床予定時刻 <span className="hint">（日本時間）</span>
           <input name="wakeTime" type="time" required
             value={fields.time} onChange={(event) => update('time', event.target.value)} />
@@ -84,7 +77,7 @@ export function GoalRegistration({ repository }: { repository: AsayellRepository
           みんなに公開する
         </label>
         <p className="visibility-description" id="public-goal-description">
-          起床予定時刻まで、ニックネーム・目標タイトル・詳細・起床予定が公開されます。
+          起床予定時刻まで、ニックネーム・目標タイトル・起床予定が公開されます。
           エールの本文と本人専用リンクは公開されません。
         </p>
         {error && <p className="feedback" role="alert">{error}</p>}
