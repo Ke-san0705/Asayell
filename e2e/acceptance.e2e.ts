@@ -10,7 +10,7 @@ function waitForRpc(page: Page, name: string) {
   return page.waitForResponse(response => new URL(response.url()).pathname === rpcPath + name)
 }
 
-async function registerGoal(page: Page, pages: boolean, isPublic = false): Promise<Locator> {
+async function registerGoal(page: Page, pages: boolean, isPublic = false, category?: '夢' | '楽しみ'): Promise<Locator> {
   if (!pages) await page.clock.setFixedTime(new Date('2026-11-28T20:00:00+09:00'))
   const wakeTime = pages
     ? new Date(Date.now() + 12 * 60 * 60 * 1000).toLocaleTimeString('en-GB', {
@@ -22,6 +22,16 @@ async function registerGoal(page: Page, pages: boolean, isPublic = false): Promi
   await expect(register).toBeDisabled()
   await page.getByLabel('ニックネーム').fill(nickname)
   await page.getByLabel('夢・目標・楽しみ').fill(title)
+  if (!pages) {
+    await expect(page.getByRole('radio', { name: '目標', exact: true })).toBeChecked()
+    await expect(page.getByLabel('詳細')).toHaveAttribute(
+      'placeholder', '例）まずは布団から出て水を飲む。小さな一歩でOK',
+    )
+    if (category) {
+      await page.getByText(category, { exact: true }).click()
+      await expect(page.getByRole('radio', { name: category, exact: true })).toBeChecked()
+    }
+  }
   await page.getByLabel('詳細').fill(detail)
   await page.getByLabel('起床予定時刻').fill(wakeTime)
   if (!pages) {
@@ -61,7 +71,8 @@ test('T01–T06: register, share, post and receive', async ({ page, context, bro
   const fixture = testInfo.project.name === 'supabase' ? createSupabaseFixture() : undefined
   await fixture?.install(context)
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
-  const owner = await registerGoal(page, pages)
+  const category = pages ? undefined : '楽しみ'
+  const owner = await registerGoal(page, pages, false, category)
   const ownerUrl = (await owner.getAttribute('href'))!
   await expectNoHorizontalOverflow(page)
 
@@ -74,12 +85,17 @@ test('T01–T06: register, share, post and receive', async ({ page, context, bro
   expect(new URL(supportUrl).pathname.split('/').at(-1))
     .not.toBe(new URL(ownerUrl).pathname.split('/').at(-1))
 
+  if (category) {
+    await page.goto('/Asayell/me')
+    await expect(page.getByRole('article').getByText(category, { exact: true })).toBeVisible()
+  }
+
   const supporter = remote ? await browser.newContext({ viewport: page.viewportSize() }) : context
   try {
     if (remote) await fixture?.install(supporter)
     const supportPage = remote ? await supporter.newPage() : page
     await supportPage.goto(supportUrl)
-    await expect(supportPage.getByText(nickname + 'さんの目標')).toBeVisible()
+    await expect(supportPage.getByText(nickname + 'さんの' + (category ?? '目標'))).toBeVisible()
     await expect(supportPage.getByRole('heading', { name: title })).toBeVisible()
     await expect(supportPage.getByText(detail, { exact: true })).toBeVisible()
     await expectNoHorizontalOverflow(supportPage)
@@ -101,7 +117,9 @@ test('T01–T06: register, share, post and receive', async ({ page, context, bro
     if (publicGoal) {
       const response = await publicGoal
       expect(response.ok()).toBe(true)
-      expect(await response.json()).toEqual([{ nickname, title, detail, wake_at: expect.any(String) }])
+      expect(await response.json()).toEqual([{
+        nickname, title, detail, wake_at: expect.any(String), category: category ? 'fun' : 'goal',
+      }])
     }
     await expect(body).toBeVisible()
     await expect(supportPage.getByText(message, { exact: true })).toHaveCount(0)
@@ -410,7 +428,7 @@ test('R3-04: public registration reaches a separate browser and the owner inbox'
       const goals = (await response.json()) as Record<string, unknown>[]
       for (const goal of goals) {
         expect(Object.keys(goal).sort()).toEqual([
-          'detail', 'message_count', 'nickname', 'support_token', 'title', 'wake_at',
+          'category', 'detail', 'message_count', 'nickname', 'support_token', 'title', 'wake_at',
         ])
       }
       const ours = goals.find(goal => goal.support_token === supportToken)
@@ -429,7 +447,7 @@ test('R3-04: public registration reaches a separate browser and the owner inbox'
     const supportResponse = await supporterGoal
     expect(supportResponse.ok()).toBe(true)
     expect(await supportResponse.json()).toEqual([{
-      nickname: 'R3-04 動作確認', title: goalTitle, detail: null, wake_at: expect.any(String),
+      nickname: 'R3-04 動作確認', title: goalTitle, detail: null, wake_at: expect.any(String), category: 'goal',
     }])
     await expect(visitorNav).toHaveCount(0)
     await visitorPage.getByLabel('メッセージ本文').fill(body)

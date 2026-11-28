@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { AsayellRepository, ProfileGoal } from './repository'
+import { goalCategoryLabels, type AsayellRepository, type ProfileGoal } from './repository'
 import { routePath } from './routes'
 
 const wakeDate = new Intl.DateTimeFormat('ja-JP', {
@@ -39,6 +39,7 @@ function ProfileCard({ goal, repository }: { goal: ProfileGoal; repository: Asay
 
   return (
     <article className="share-option profile-goal">
+      <span className="category-badge">{goalCategoryLabels[goal.category]}</span>
       <h2>{goal.title}</h2>
       <p>起床予定 <time dateTime={goal.wakeAt}>{wakeDate.format(new Date(goal.wakeAt))}</time></p>
       <p>届いた応援 {goal.messageCount}件</p>

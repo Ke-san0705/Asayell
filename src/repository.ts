@@ -1,41 +1,51 @@
+export const goalCategoryLabels = { dream: '夢', goal: '目標', fun: '楽しみ' } as const
+export type GoalCategory = keyof typeof goalCategoryLabels
+export const defaultGoalCategory: GoalCategory = 'goal'
+
 export interface GoalInput {
   nickname: string
   title: string
   detail?: string
+  category?: GoalCategory
   isPublic?: boolean
   /** Next wake-up in Asia/Tokyo, supplied as an ISO 8601 timestamp with an offset or Z. */
   wake_at: string
 }
 
 export interface Goal extends GoalInput {
+  category: GoalCategory
   goal_id: string
   support_token: string
   owner_token: string
 }
 
-export type SupportGoal = Pick<Goal, 'nickname' | 'title' | 'detail'>
-export type PublicGoal = Pick<Goal, 'nickname' | 'title' | 'detail' | 'wake_at' | 'support_token'> & {
+export type StoredGoal = Omit<Goal, 'category'> & Pick<GoalInput, 'category'>
+
+export type SupportGoal = Pick<Goal, 'nickname' | 'title' | 'detail' | 'category'>
+export type PublicGoal = Pick<Goal, 'nickname' | 'title' | 'detail' | 'wake_at' | 'support_token' | 'category'> & {
   message_count: number
 }
 
-export type OwnerGoal = GoalInput & { is_unlocked?: boolean; message_count?: number }
+export type OwnerGoal = GoalInput & { category: GoalCategory; is_unlocked?: boolean; message_count?: number }
 
 export interface ProfileGoal {
   goalId: string
   ownerToken: string
   supportToken: string
   title: string
+  category: GoalCategory
   wakeAt: string
   isPublic: boolean
   messageCount: number
 }
 
-export function toProfileGoal(saved: Goal, current: OwnerGoal): ProfileGoal {
+export function toProfileGoal(saved: StoredGoal, current: OwnerGoal): ProfileGoal {
   return {
     goalId: saved.goal_id,
     ownerToken: saved.owner_token,
     supportToken: saved.support_token,
     title: current.title,
+    category: current.category,
     wakeAt: current.wake_at,
     isPublic: current.isPublic ?? false,
     messageCount: current.message_count ?? 0,
@@ -134,7 +144,8 @@ export class LocalStorageRepository implements AsayellRepository {
     validateGoal(input)
 
     const goal: Goal = {
-      nickname, title, detail, wake_at, isPublic: input.isPublic ?? false,
+      nickname, title, detail, wake_at, category: input.category ?? defaultGoalCategory,
+      isPublic: input.isPublic ?? false,
       goal_id: crypto.randomUUID(),
       ...createGoalTokens(),
     }
@@ -143,36 +154,39 @@ export class LocalStorageRepository implements AsayellRepository {
   }
 
   async getGoalById(goalId: string): Promise<Goal | null> {
-    return this.read<Goal>(goalPrefix + goalId)
+    const goal = this.read<StoredGoal>(goalPrefix + goalId)
+    return goal && { ...goal, category: goal.category ?? defaultGoalCategory }
   }
 
   async getGoalBySupportToken(token: string): Promise<(SupportGoal & Pick<Goal, 'goal_id'>) | null> {
-    for (const goal of this.records<Goal>(goalPrefix)) {
+    for (const goal of this.records<StoredGoal>(goalPrefix)) {
       if (goal.support_token === token) {
         const { goal_id, nickname, title, detail } = goal
-        return { goal_id, nickname, title, detail }
+        return { goal_id, nickname, title, detail, category: goal.category ?? defaultGoalCategory }
       }
     }
     return null
   }
 
   async getGoalByOwnerToken(token: string): Promise<Goal | null> {
-    for (const goal of this.records<Goal>(goalPrefix)) {
-      if (goal.owner_token === token) return { ...goal, isPublic: goal.isPublic ?? false }
+    for (const goal of this.records<StoredGoal>(goalPrefix)) {
+      if (goal.owner_token === token) {
+        return { ...goal, category: goal.category ?? defaultGoalCategory, isPublic: goal.isPublic ?? false }
+      }
     }
     return null
   }
 
   async listOwnerGoals(): Promise<ProfileGoal[]> {
-    return Promise.all([...this.records<Goal>(goalPrefix)].map(async (goal) => {
+    return Promise.all([...this.records<StoredGoal>(goalPrefix)].map(async (goal) => {
       const messages = await this.listMessages(goal.goal_id)
-      return toProfileGoal(goal, { ...goal, message_count: messages.length })
+      return toProfileGoal(goal, { ...goal, category: goal.category ?? defaultGoalCategory, message_count: messages.length })
     }))
   }
 
   async listPublicGoals(limit = 20): Promise<PublicGoal[]> {
     const now = Date.now()
-    const goals = [...this.records<Goal>(goalPrefix)]
+    const goals = [...this.records<StoredGoal>(goalPrefix)]
       .filter((goal) => goal.isPublic === true && Date.parse(goal.wake_at) > now)
 
     // Sample without replacement, matching the RPC's random ordering.
@@ -186,7 +200,10 @@ export class LocalStorageRepository implements AsayellRepository {
     return Promise.all(goals.slice(0, count).map(async (goal) => {
       const { nickname, title, detail, wake_at, support_token } = goal
       const messages = await this.listMessages(goal.goal_id)
-      return { nickname, title, detail, wake_at, support_token, message_count: messages.length }
+      return {
+        nickname, title, detail, wake_at, support_token,
+        category: goal.category ?? defaultGoalCategory, message_count: messages.length,
+      }
     }))
   }
 

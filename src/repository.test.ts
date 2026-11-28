@@ -22,9 +22,9 @@ const goalInput = {
 describe('LocalStorageRepository', () => {
   it('persists goals and looks them up by ID and either token after reopening', async () => {
     const { storage, entries, repository } = setup()
-    const goal = await repository.createGoal(goalInput)
+    const goal = await repository.createGoal({ ...goalInput, category: 'dream' })
     const reopened = new LocalStorageRepository(storage)
-    expect(goal).toMatchObject(goalInput)
+    expect(goal).toMatchObject({ ...goalInput, category: 'dream' })
     expect(goal.goal_id).toMatch(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/)
     expect(await reopened.getGoalById(goal.goal_id)).toEqual(goal)
     expect(await reopened.getGoalByOwnerToken(goal.owner_token)).toEqual(goal)
@@ -33,6 +33,7 @@ describe('LocalStorageRepository', () => {
       nickname: goal.nickname,
       title: goal.title,
       detail: goal.detail,
+      category: 'dream',
     })
     expect([...entries.keys()]).toEqual([`asayell:goal:${goal.goal_id}`])
     expect(await reopened.getGoalById('missing')).toBeNull()
@@ -83,7 +84,7 @@ it('publishes only upcoming opted-in goals and excludes hidden messages from cou
   const reopened = new LocalStorageRepository(storage)
   expect((await reopened.getGoalByOwnerToken(goal.owner_token))?.isPublic).toBe(true)
   expect(await reopened.listPublicGoals()).toEqual([{
-    ...goalInput, wake_at, support_token: goal.support_token, message_count: 1,
+    ...goalInput, wake_at, category: 'goal', support_token: goal.support_token, message_count: 1,
   }])
   await expect(reopened.hideMessage(goal.support_token, message.message_id)).rejects.toThrow()
   await reopened.hideMessage(goal.owner_token, message.message_id)
@@ -96,7 +97,7 @@ it('publishes only upcoming opted-in goals and excludes hidden messages from cou
 it('lists only device goals with counts before wake-up', async () => {
   const { repository, storage } = setup()
   const goal = await repository.createGoal({
-    nickname: 'あさ', title: '散歩', wake_at: '2099-01-01T07:00:00+09:00',
+    nickname: 'あさ', title: '散歩', category: 'fun', wake_at: '2099-01-01T07:00:00+09:00',
   })
   await repository.postMessage(goal.support_token, { body: '応援しています' })
   await repository.setPublic(goal.owner_token, true)
@@ -106,10 +107,21 @@ it('lists only device goals with counts before wake-up', async () => {
   const reopened = new LocalStorageRepository(storage)
   expect(await reopened.listOwnerGoals()).toEqual(expect.arrayContaining([{
     goalId: goal.goal_id, ownerToken: goal.owner_token, supportToken: goal.support_token,
-    title: goal.title, wakeAt: goal.wake_at, isPublic: true, messageCount: 1,
+    title: goal.title, category: 'fun', wakeAt: goal.wake_at, isPublic: true, messageCount: 1,
   }, {
     goalId: other.goal_id, ownerToken: other.owner_token, supportToken: other.support_token,
-    title: other.title, wakeAt: other.wake_at, isPublic: false, messageCount: 0,
+    title: other.title, category: 'goal', wakeAt: other.wake_at, isPublic: false, messageCount: 0,
   }]))
   expect(await setup().repository.listOwnerGoals()).toEqual([])
+})
+
+it('defaults legacy goals without a category to 目標', async () => {
+  const { entries, repository } = setup()
+  entries.set('asayell:goal:legacy', JSON.stringify({
+    ...goalInput, goal_id: 'legacy', owner_token: 'owner', support_token: 'support',
+  }))
+  expect(await repository.getGoalById('legacy')).toMatchObject({ category: 'goal' })
+  expect(await repository.getGoalByOwnerToken('owner')).toMatchObject({ category: 'goal' })
+  expect(await repository.getGoalBySupportToken('support')).toMatchObject({ category: 'goal' })
+  expect(await repository.listOwnerGoals()).toMatchObject([{ category: 'goal' }])
 })

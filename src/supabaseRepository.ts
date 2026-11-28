@@ -1,14 +1,14 @@
 import {
-  createGoalTokens, toProfileGoal, validateGoal, validateMessageBody,
+  createGoalTokens, defaultGoalCategory, toProfileGoal, validateGoal, validateMessageBody,
   type AsayellRepository, type Goal, type GoalInput, type InboxMessage,
-  type OwnerGoal, type ProfileGoal, type PublicGoal, type RepositoryStorage, type SupportGoal, type SupportMessageInput,
+  type OwnerGoal, type ProfileGoal, type PublicGoal, type RepositoryStorage, type StoredGoal, type SupportGoal, type SupportMessageInput,
 } from './repository'
 
 type GoalRow = Omit<GoalInput, 'detail' | 'isPublic'> & { detail: string | null; is_public?: boolean }
 type CreatedGoalRow = GoalRow & { id: string; support_token: string; owner_token: string }
 type OwnerGoalRow = GoalRow & { is_unlocked: boolean; message_count?: number }
 type MessageRow = Omit<InboxMessage, 'sender' | 'message_id'> & { id?: string; sender: string | null }
-type PublicGoalRow = Omit<PublicGoal, 'detail'> & { detail: string | null }
+type PublicGoalRow = Omit<PublicGoal, 'detail' | 'category'> & Pick<GoalRow, 'detail' | 'category'>
 
 export class SupabaseRepository implements AsayellRepository {
   private readonly rpcUrl: string
@@ -51,13 +51,14 @@ export class SupabaseRepository implements AsayellRepository {
       p_wake_at: input.wake_at,
       p_support_token: support_token,
       p_owner_token: owner_token,
-      // Both RPC versions support private registration with these original arguments.
+      p_category: input.category ?? defaultGoalCategory,
       ...(input.isPublic ? { p_is_public: true } : {}),
     })
     const row = Array.isArray(result) ? result[0] : result
     if (!row?.id) throw new Error('登録した目標を取得できませんでした。')
     const goal: Goal = {
       goal_id: row.id, nickname: row.nickname, title: row.title, detail: row.detail ?? undefined,
+      category: row.category ?? input.category ?? defaultGoalCategory,
       wake_at: row.wake_at, isPublic: row.is_public ?? false, support_token: row.support_token, owner_token: row.owner_token,
     }
     // The share route is opened by ID in the registering browser after navigation.
@@ -67,13 +68,18 @@ export class SupabaseRepository implements AsayellRepository {
 
   async getGoalById(goalId: string): Promise<Goal | null> {
     const value = (this.storage ?? window.localStorage).getItem(this.sharePrefix + goalId)
-    return value === null ? null : JSON.parse(value) as Goal
+    if (value === null) return null
+    const goal = JSON.parse(value) as StoredGoal
+    return { ...goal, category: goal.category ?? defaultGoalCategory }
   }
 
   async getGoalBySupportToken(token: string): Promise<SupportGoal | null> {
     const [row] = await this.rpc<GoalRow[]>('asayell_get_goal_for_support', { p_support_token: token })
     if (!row) return null
-    return { nickname: row.nickname, title: row.title, detail: row.detail ?? undefined }
+    return {
+      nickname: row.nickname, title: row.title, detail: row.detail ?? undefined,
+      category: row.category ?? defaultGoalCategory,
+    }
   }
 
   async getGoalByOwnerToken(token: string): Promise<OwnerGoal | null> {
@@ -81,18 +87,19 @@ export class SupabaseRepository implements AsayellRepository {
     if (!row) return null
     return {
       nickname: row.nickname, title: row.title, detail: row.detail ?? undefined,
+      category: row.category ?? defaultGoalCategory,
       wake_at: row.wake_at, is_unlocked: row.is_unlocked, isPublic: row.is_public, message_count: row.message_count,
     }
   }
 
   async listOwnerGoals(): Promise<ProfileGoal[]> {
     const storage = this.storage ?? window.localStorage
-    const savedGoals: Goal[] = []
+    const savedGoals: StoredGoal[] = []
     for (let index = 0; index < storage.length; index += 1) {
       const key = storage.key(index)
       if (!key?.startsWith(this.sharePrefix)) continue
       const value = storage.getItem(key)
-      if (value !== null) savedGoals.push(JSON.parse(value) as Goal)
+      if (value !== null) savedGoals.push(JSON.parse(value) as StoredGoal)
     }
 
     const goals = await Promise.all(savedGoals.map(async (saved) => {
@@ -104,8 +111,9 @@ export class SupabaseRepository implements AsayellRepository {
 
   async listPublicGoals(limit = 20): Promise<PublicGoal[]> {
     const rows = await this.rpc<PublicGoalRow[]>('asayell_list_public_goals', { p_limit: limit })
-    return rows.map(({ nickname, title, detail, wake_at, support_token, message_count }) => ({
+    return rows.map(({ nickname, title, detail, wake_at, support_token, message_count, category }) => ({
       nickname, title, detail: detail ?? undefined, wake_at, support_token, message_count,
+      category: category ?? defaultGoalCategory,
     }))
   }
 
