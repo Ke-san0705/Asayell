@@ -88,11 +88,20 @@ export function GoalRegistration({ repository }: { repository: AsayellRepository
             ))}
           </div>
         </fieldset>
-        <label>
-          夢・目標・楽しみ <span className="hint">（{goalLimits.title}文字まで）</span>
-          <input name="title" required maxLength={goalLimits.title}
-            value={fields.title} onChange={(event) => update('title', event.target.value)} />
-        </label>
+        <div>
+          <label>
+            夢・目標・楽しみ <span className="hint">（{goalLimits.title}文字まで）</span>
+            <input name="title" required maxLength={goalLimits.title}
+              placeholder="例：先輩に質問できるようになる"
+              aria-describedby="goal-title-examples"
+              value={fields.title} onChange={(event) => update('title', event.target.value)} />
+          </label>
+          <ul className="hint goal-title-examples" id="goal-title-examples" aria-label="目標の入力例">
+            <li>初めての商談、緊張するけど頑張る</li>
+            <li>朝の満員電車に負けずに出社する</li>
+            <li>先輩に質問できるようになる</li>
+          </ul>
+        </div>
         <label>
           起床予定時刻 <span className="hint">（日本時間）</span>
           <input name="wakeTime" type="time" required
