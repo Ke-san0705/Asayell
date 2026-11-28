@@ -1,9 +1,10 @@
 import {
-  createGoalTokens, defaultGoalCategory, toProfileGoal, validateGoal, validateMessageBody,
-  type AsayellRepository, type Goal, type GoalInput, type InboxMessage,
-  type OwnerGoal, type ProfileGoal, type PublicGoal, type RepositoryStorage, type StoredGoal, type SupportGoal, type SupportMessageInput,
+  createGoalTokens, defaultGoalCategory, getOrCreateDeviceId, normalizeAccountName, toProfileGoal, validateGoal, validateMessageBody,
+  type AsayellRepository, type CreateGoalInput, type Goal, type GoalInput, type InboxMessage,
+  type OwnerGoal, type Profile, type ProfileGoal, type PublicGoal, type RepositoryStorage, type StoredGoal, type SupportGoal, type SupportMessageInput,
 } from './repository'
 
+type ProfileRow = { account_name: string }
 type GoalRow = Omit<GoalInput, 'detail' | 'isPublic'> & { detail: string | null; is_public?: boolean }
 type CreatedGoalRow = GoalRow & { id: string; support_token: string; owner_token: string }
 type OwnerGoalRow = GoalRow & { is_unlocked: boolean; message_count?: number }
@@ -40,12 +41,31 @@ export class SupabaseRepository implements AsayellRepository {
     return `asayell:share:${this.rpcUrl}:`
   }
 
-  async createGoal(input: GoalInput): Promise<Goal> {
+  async getProfile(): Promise<Profile | null> {
+    const [row] = await this.rpc<ProfileRow[]>('asayell_get_profile', {
+      p_device_id: getOrCreateDeviceId(this.storage),
+    })
+    return row ? { accountName: row.account_name } : null
+  }
+
+  async setProfile(accountName: string): Promise<Profile> {
+    const name = normalizeAccountName(accountName)
+    const result = await this.rpc<ProfileRow | ProfileRow[]>('asayell_upsert_profile', {
+      p_device_id: getOrCreateDeviceId(this.storage),
+      p_account_name: name,
+    })
+    const row = Array.isArray(result) ? result[0] : result
+    if (!row?.account_name) throw new Error('保存したアカウント名を取得できませんでした。')
+    return { accountName: row.account_name }
+  }
+
+  async createGoal(input: CreateGoalInput): Promise<Goal> {
     validateGoal(input)
     const storage = this.storage ?? window.localStorage
     const { support_token, owner_token } = createGoalTokens()
     const result = await this.rpc<CreatedGoalRow | CreatedGoalRow[]>('asayell_create_goal', {
-      p_nickname: input.nickname,
+      p_nickname: input.nickname ?? null,
+      ...(input.nickname === undefined ? { p_device_id: getOrCreateDeviceId(storage) } : {}),
       p_title: input.title,
       p_detail: input.detail ?? null,
       p_wake_at: input.wake_at,

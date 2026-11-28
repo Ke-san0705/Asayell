@@ -543,6 +543,11 @@ h1 {
   outline-offset: -3px;
 }
 
+.account-name-form {
+  margin: 1.25rem 0;
+}
+
+.account-name,
 .profile-goal {
   overflow-wrap: anywhere;
 }

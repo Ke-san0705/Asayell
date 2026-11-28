@@ -19,6 +19,7 @@ type GoalRow = {
 type MessageRow = { id: string; body: string | null; sender: string | null; created_at: string }
 
 export function createSupabaseFixture(now = Date.now) {
+  const profiles = new Map<string, { account_name: string }>()
   let goal: GoalRow | undefined
   const messages: MessageRow[] = []
   let unlocked = false
@@ -44,10 +45,27 @@ export function createSupabaseFixture(now = Date.now) {
         })
 
         switch (path) {
-          case rpcPath + 'asayell_create_goal':
+          case rpcPath + 'asayell_get_profile': {
+            const profile = profiles.get(args.p_device_id!)
+            await route.fulfill({ json: profile ? [profile] : [] })
+            break
+          }
+          case rpcPath + 'asayell_upsert_profile': {
+            expect(args.p_device_id).toMatch(/^[0-9a-f]{32}$/)
+            const profile = { account_name: args.p_account_name! }
+            profiles.set(args.p_device_id!, profile)
+            await route.fulfill({ json: profile })
+            break
+          }
+          case rpcPath + 'asayell_create_goal': {
+            const profile = profiles.get(args.p_device_id!)
+            if (args.p_device_id && !profile) {
+              await route.fulfill({ status: 400, json: { message: 'profile not found for device' } })
+              break
+            }
             goal = {
               id: 'e2e-goal',
-              nickname: args.p_nickname,
+              nickname: profile?.account_name ?? args.p_nickname,
               title: args.p_title,
               detail: args.p_detail,
               wake_at: args.p_wake_at!,
@@ -58,6 +76,7 @@ export function createSupabaseFixture(now = Date.now) {
             }
             await route.fulfill({ json: goal })
             break
+          }
           case rpcPath + 'asayell_list_public_goals':
             expect(args).toEqual({ p_limit: 20 })
             await route.fulfill({

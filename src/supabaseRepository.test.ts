@@ -33,6 +33,7 @@ it('registers, shares and receives across browsers using only token-scoped RPCs'
     .mockResolvedValueOnce(response([{ ...input, detail: null, message_count: 1, is_unlocked: false, is_public: true }]))
     .mockResolvedValueOnce(response([]))
     .mockResolvedValueOnce(response([{ id: 'message-id', sender: null, body, created_at: input.wake_at }]))
+    .mockResolvedValueOnce(response([{ ...input, detail: null, message_count: 1, is_unlocked: false, is_public: true }]))
 
   const owner = new SupabaseRepository(url, 'anon', storage, rpc)
   const supporter = new SupabaseRepository(url, 'anon', { ...storage, getItem: () => null }, rpc)
@@ -47,6 +48,9 @@ it('registers, shares and receives across browsers using only token-scoped RPCs'
   expect(await owner.listOwnerMessages(goal.owner_token, true)).toEqual([
     { message_id: 'message-id', sender: undefined, body, created_at: input.wake_at },
   ])
+  expect(await owner.listOwnerGoals()).toMatchObject([{
+    goalId: goal.goal_id, ownerToken: goal.owner_token, title: goal.title, messageCount: 1,
+  }])
 
   expect(creation.mock.calls[0][0]).toBe(url + '/rest/v1/rpc/asayell_create_goal')
   expect(rpc.mock.calls.map(([path, options]) => {
@@ -62,6 +66,7 @@ it('registers, shares and receives across browsers using only token-scoped RPCs'
     [url + '/rest/v1/rpc/asayell_get_owner_goal', { p_owner_token: goal.owner_token }],
     [url + '/rest/v1/rpc/asayell_get_owner_messages', { p_owner_token: goal.owner_token, p_demo: false }],
     [url + '/rest/v1/rpc/asayell_get_owner_messages', { p_owner_token: goal.owner_token, p_demo: true }],
+    [url + '/rest/v1/rpc/asayell_get_owner_goal', { p_owner_token: goal.owner_token }],
   ])
 })
 
@@ -92,4 +97,46 @@ it('uses the public listing and owner mutation RPCs and checks their results', a
       [url + '/rest/v1/rpc/asayell_set_public', { p_owner_token: 'owner', p_is_public: false }],
       [url + '/rest/v1/rpc/asayell_hide_message', { p_owner_token: 'owner', p_message_id: 'message' }],
     ])
+})
+
+it('uses the same device ID for profile RPCs and account-based goal creation', async () => {
+  const url = 'https://example.supabase.co'
+  const entries = new Map<string, string>()
+  const storage = {
+    length: 0, key: () => null,
+    getItem: (key: string) => entries.get(key) ?? null,
+    setItem: (key: string, value: string) => { entries.set(key, value) },
+  }
+  const row = { account_name: 'あさ', created_at: '2026-11-28T00:00:00Z' }
+  const input = { title: '散歩', wake_at: '2026-11-29T07:00:00+09:00' }
+  const rpc = vi.fn<typeof fetch>()
+    .mockResolvedValueOnce(Response.json([]))
+    .mockResolvedValueOnce(new Response(null, { status: 400 }))
+    .mockResolvedValueOnce(Response.json(row))
+    .mockResolvedValueOnce(Response.json([row]))
+    .mockImplementationOnce(async (_path, options) => {
+      const args = JSON.parse(String(options?.body))
+      return Response.json({ ...input, id: 'goal', nickname: row.account_name,
+        owner_token: args.p_owner_token, support_token: args.p_support_token, detail: null })
+    })
+  const repository = new SupabaseRepository(url, 'anon', storage, rpc)
+  expect(await repository.getProfile()).toBeNull()
+  await expect(repository.createGoal(input)).rejects.toThrow('400')
+  await expect(repository.setProfile('あ'.repeat(21))).rejects.toThrow(RangeError)
+  expect(await repository.setProfile('あさ')).toEqual({ accountName: 'あさ' })
+  const reopened = new SupabaseRepository(url, 'anon', storage, rpc)
+  expect(await reopened.getProfile()).toEqual({ accountName: 'あさ' })
+  expect(await reopened.createGoal(input)).toMatchObject({ nickname: 'あさ' })
+
+  const deviceId = entries.get('asayell:device-id')
+  expect(deviceId).toMatch(/^[0-9a-f]{32}$/)
+  expect(rpc.mock.calls.map(([path, options]) => {
+    expect(options?.method).toBe('POST')
+    const args = JSON.parse(String(options?.body))
+    expect(args.p_device_id).toBe(deviceId)
+    if (String(path).endsWith('create_goal')) expect(args.p_nickname).toBeNull()
+    if (String(path).endsWith('upsert_profile')) expect(args.p_account_name).toBe('あさ')
+    return path
+  })).toEqual(['get_profile', 'create_goal', 'upsert_profile', 'get_profile', 'create_goal']
+    .map(name => url + '/rest/v1/rpc/asayell_' + name))
 })

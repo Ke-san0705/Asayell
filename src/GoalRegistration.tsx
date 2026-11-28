@@ -1,16 +1,44 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { goalLimits, isValidRegistration, nextWakeAt } from './registrationFields'
 import { defaultGoalCategory, goalCategoryLabels, type AsayellRepository, type GoalCategory } from './repository'
 import { routePath } from './routes'
 
 export function GoalRegistration({ repository }: { repository: AsayellRepository }) {
-  const [fields, setFields] = useState({ nickname: '', title: '', time: '' })
+  const [fields, setFields] = useState({ title: '', time: '' })
   const [category, setCategory] = useState<GoalCategory>(defaultGoalCategory)
   const [isPublic, setIsPublic] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const submitting = useRef(false)
-  const valid = isValidRegistration(fields)
+  const [accountName, setAccountName] = useState<string | null | undefined>(undefined)
+  const [profileError, setProfileError] = useState(false)
+  const valid = Boolean(accountName) && isValidRegistration(fields)
+
+  useEffect(() => {
+    let requestId = 0
+
+    function loadProfile() {
+      const id = ++requestId
+      setAccountName(undefined)
+      setProfileError(false)
+      void repository.getProfile().then((profile) => {
+        if (requestId === id) setAccountName(profile?.accountName ?? null)
+      }).catch(() => {
+        if (requestId === id) setProfileError(true)
+      })
+    }
+
+    function restore(event: PageTransitionEvent) {
+      if (event.persisted) loadProfile()
+    }
+
+    loadProfile()
+    window.addEventListener('pageshow', restore)
+    return () => {
+      requestId += 1
+      window.removeEventListener('pageshow', restore)
+    }
+  }, [repository])
 
   function update(field: keyof typeof fields, value: string) {
     setFields((current) => ({ ...current, [field]: value }))
@@ -25,7 +53,6 @@ export function GoalRegistration({ repository }: { repository: AsayellRepository
     setError('')
     try {
       const goal = await repository.createGoal({
-        nickname: fields.nickname.trim(),
         title: fields.title.trim(),
         wake_at: nextWakeAt(fields.time),
         category,
@@ -43,11 +70,10 @@ export function GoalRegistration({ repository }: { repository: AsayellRepository
     <>
       <p className="intro">明日の朝が少し楽しみになることを、ひとつ書いてみませんか。</p>
       <form className="goal-form" onSubmit={submit} aria-busy={saving}>
-        <label>
-          ニックネーム <span className="hint">（{goalLimits.nickname}文字まで）</span>
-          <input name="nickname" required maxLength={goalLimits.nickname}
-            value={fields.nickname} onChange={(event) => update('nickname', event.target.value)} />
-        </label>
+        {profileError && <p role="alert">アカウント名を読み込めませんでした。もう一度ページを開いてください。</p>}
+        {!profileError && accountName === undefined && <p role="status">アカウント名を読み込んでいます。</p>}
+        {accountName === null && <p><a href={import.meta.env.BASE_URL + 'me'}>プロフィール</a>でアカウント名を設定してください。</p>}
+        {accountName && <p className="account-name">アカウント名 {accountName}</p>}
         <fieldset className="category-field" disabled={saving}>
           <legend>種類</legend>
           <div className="category-options">
@@ -77,7 +103,7 @@ export function GoalRegistration({ repository }: { repository: AsayellRepository
           みんなに公開する
         </label>
         <p className="visibility-description" id="public-goal-description">
-          起床予定時刻まで、ニックネーム・目標タイトル・起床予定が公開されます。
+          起床予定時刻まで、アカウント名・目標タイトル・起床予定が公開されます。
           エールの本文と本人専用リンクは公開されません。
         </p>
         {error && <p className="feedback" role="alert">{error}</p>}
