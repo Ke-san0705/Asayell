@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { createSupabaseFixture, rpcPath } from './supabaseFixture'
+import { createSupabaseFixture, fixtureKey, fixtureUrl, rpcPath } from './supabaseFixture'
 
 const nickname = 'あさ'
 const title = 'Morning'.repeat(14)
@@ -264,28 +264,46 @@ test('public feed links to support and excludes private or expired goals', async
   await expect(support).toHaveCount(0)
 })
 
-test('FIX-1: existing goal details remain visible in the feed and support page', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'local', 'Existing goals are seeded in browser storage.')
-  await page.clock.setFixedTime(new Date('2026-11-28T20:00:00+09:00'))
+test('R5-03: the profile merges device goals and legacy receipts with details', async ({ page, context }, testInfo) => {
+  test.skip(testInfo.project.name === 'pages', 'Creating a pre-R5 goal requires a test backend.')
+  const remote = testInfo.project.name === 'supabase'
+  const now = new Date('2026-11-28T20:00:00+09:00')
+  if (remote) await createSupabaseFixture(() => now.getTime()).install(context)
+  await page.clock.setFixedTime(now)
   await page.goto('/Asayell/')
-  await page.evaluate(({ nickname, title, detail }) => {
-    localStorage.setItem('asayell:goal:legacy', JSON.stringify({
-      goal_id: 'legacy',
-      nickname,
-      title,
+
+  const legacyTitle = '以前に登録した夢'
+  const legacy = await page.evaluate(async ({ remote, fixtureUrl, fixtureKey, legacyTitle, detail }) => {
+    const path = remote ? '/Asayell/src/supabaseRepository.ts' : '/Asayell/src/repository.ts'
+    const { SupabaseRepository, LocalStorageRepository } = await import(path)
+    const repository = remote
+      ? new SupabaseRepository(fixtureUrl, fixtureKey)
+      : new LocalStorageRepository()
+    return repository.createGoal({
+      nickname: '以前の表示名',
+      title: legacyTitle,
       detail,
       wake_at: '2026-11-29T07:00:00+09:00',
       category: 'dream',
       isPublic: true,
-      support_token: 'legacy-support',
-      owner_token: 'legacy-owner',
-      created_at: Date.now(),
-    }))
-  }, { nickname, title, detail })
+    })
+  }, { remote, fixtureUrl, fixtureKey, legacyTitle, detail })
+
+  await registerGoal(page, false, true, '夢')
+  await page.goto('/Asayell/me')
+  const card = (name: string) => page.getByRole('article').filter({
+    has: page.getByRole('heading', { name, exact: true }),
+  })
+  await expect(card(title)).toHaveCount(1)
+  await expect(card(legacyTitle)).toHaveCount(1)
+  await card(legacyTitle).getByRole('button', { name: '受信画面を開く' }).click()
+  await expect(page).toHaveURL('/Asayell/o/' + legacy.owner_token)
+  await expect(page.getByText(/明日の朝にエールが届きます/)).toBeVisible()
 
   await page.goto('/Asayell/feed')
-  await expect(page.getByText(detail, { exact: true })).toBeVisible()
-  await page.getByRole('link', { name: '応援する' }).click()
+  await expect(card(title).getByText(nickname, { exact: true })).toBeVisible()
+  await expect(card(legacyTitle).getByText(detail, { exact: true })).toBeVisible()
+  await card(legacyTitle).getByRole('link', { name: '応援する' }).click()
   await expect(page.getByText(detail, { exact: true })).toBeVisible()
 })
 
@@ -505,7 +523,7 @@ test('R4-04: categorized registration reaches a separate browser and the owner i
     await expect(profile).not.toContainText(ownerUrl)
     await expect(profile.getByRole('button', { name: '応援募集URLをコピー' })).toBeVisible()
 
-    if (fixture) {
+    {
       await expect(profile).toHaveCount(1)
       const storageState = await context.storageState()
       for (const origin of storageState.origins) {
@@ -513,7 +531,7 @@ test('R4-04: categorized registration reaches a separate browser and the owner i
       }
       const sameDevice = await browser.newContext({ baseURL, storageState })
       try {
-        await fixture.install(sameDevice)
+        await fixture?.install(sameDevice)
         const devicePage = await sameDevice.newPage()
         await devicePage.goto('/Asayell/me')
         const deviceGoal = devicePage.getByRole('article').filter({ hasText: goalTitle })
@@ -524,6 +542,7 @@ test('R4-04: categorized registration reaches a separate browser and the owner i
     }
 
     await visitorPage.goto('/Asayell/me')
+    await expect(visitorPage.getByLabel('アカウント名')).toBeEmpty()
     await expect(visitorPage.getByText(/このブラウザには登録した夢の控えがありません/)).toBeVisible()
 
     async function checkFeed(count: number | null) {
@@ -544,7 +563,8 @@ test('R4-04: categorized registration reaches a separate browser and the owner i
         expect(ours).toBeUndefined()
         await expect(card).toHaveCount(0)
       } else {
-        expect(ours).toMatchObject({ title: goalTitle, category: 'fun', message_count: count })
+        expect(ours).toMatchObject({ title: goalTitle, nickname: 'R4-04 動作確認', category: 'fun', message_count: count })
+        await expect(card.getByText('R4-04 動作確認', { exact: true })).toBeVisible()
         await expect(card.getByText('楽しみ', { exact: true })).toBeVisible()
         await expect(card.getByText('届いた応援 ' + count + '件')).toBeVisible()
       }

@@ -20,9 +20,7 @@ type MessageRow = { id: string; body: string | null; sender: string | null; crea
 
 export function createSupabaseFixture(now = Date.now) {
   const profiles = new Map<string, { account_name: string }>()
-  let goal: GoalRow | undefined
-  let ownerDeviceId: string | null
-  const messages: MessageRow[] = []
+  const goals: Array<GoalRow & { deviceId: string | null; messages: MessageRow[] }> = []
   let unlocked = false
 
   return {
@@ -39,8 +37,8 @@ export function createSupabaseFixture(now = Date.now) {
         })
         const args = request.postDataJSON() as RpcArgs & { p_demo?: boolean; p_is_public?: boolean; p_limit?: number }
         const path = new URL(request.url()).pathname
-        const supportGoal = goal && goal.support_token === args.p_support_token ? goal : undefined
-        const ownerGoal = goal && goal.owner_token === args.p_owner_token ? goal : undefined
+        const supportGoal = goals.find(goal => goal.support_token === args.p_support_token)
+        const ownerGoal = goals.find(goal => goal.owner_token === args.p_owner_token)
         const publicFields = ({ nickname, title, detail, wake_at, category }: GoalRow) => ({
           nickname, title, detail, wake_at, category,
         })
@@ -59,17 +57,19 @@ export function createSupabaseFixture(now = Date.now) {
             break
           }
           case rpcPath + 'asayell_create_goal': {
-            expect(args.p_device_id).toMatch(/^[0-9a-f]{32}$/)
-            expect(args.p_nickname).toBeNull()
-            const profile = profiles.get(args.p_device_id!)
-            if (!profile) {
-              await route.fulfill({ status: 400, json: { message: 'profile not found for device' } })
-              break
+            const deviceId = args.p_device_id ?? null
+            const profile = deviceId ? profiles.get(deviceId) : undefined
+            if (deviceId) {
+              expect(deviceId).toMatch(/^[0-9a-f]{32}$/)
+              expect(args.p_nickname).toBeNull()
+              if (!profile) {
+                await route.fulfill({ status: 400, json: { message: 'profile not found for device' } })
+                break
+              }
             }
-            ownerDeviceId = args.p_device_id
-            goal = {
-              id: 'e2e-goal',
-              nickname: profile.account_name,
+            const goal = {
+              id: crypto.randomUUID(),
+              nickname: profile?.account_name ?? args.p_nickname,
               title: args.p_title,
               detail: args.p_detail,
               wake_at: args.p_wake_at!,
@@ -78,27 +78,24 @@ export function createSupabaseFixture(now = Date.now) {
               category: args.p_category ?? 'goal',
               is_public: args.p_is_public ?? false,
             }
+            goals.unshift({ ...goal, deviceId, messages: [] })
             await route.fulfill({ json: goal })
             break
           }
           case rpcPath + 'asayell_list_my_goals': {
             expect(args.p_device_id).toMatch(/^[0-9a-f]{32}$/)
-            if (!goal || ownerDeviceId !== args.p_device_id) {
-              await route.fulfill({ json: [] })
-              break
-            }
-            const { title, wake_at, is_public, category, support_token, owner_token } = goal
-            await route.fulfill({ json: [
-              { title, wake_at, is_public, category, support_token, owner_token, message_count: messages.length },
-            ] })
+            const owned = goals.filter(goal => goal.deviceId === args.p_device_id)
+            await route.fulfill({ json: owned.map(({ title, wake_at, is_public, category, support_token, owner_token, messages }) => ({
+              title, wake_at, is_public, category, support_token, owner_token, message_count: messages.length,
+            })) })
             break
           }
           case rpcPath + 'asayell_list_public_goals':
             expect(args).toEqual({ p_limit: 20 })
             await route.fulfill({
-              json: goal?.is_public && Date.parse(goal.wake_at) > now() ? [{
-                ...publicFields(goal), support_token: goal.support_token, message_count: messages.length,
-              }] : [],
+              json: goals.filter(goal => goal.is_public && Date.parse(goal.wake_at) > now()).map(goal => ({
+                ...publicFields(goal), support_token: goal.support_token, message_count: goal.messages.length,
+              })),
             })
             break
           case rpcPath + 'asayell_get_goal_for_support':
@@ -106,7 +103,7 @@ export function createSupabaseFixture(now = Date.now) {
             break
           case rpcPath + 'asayell_post_message':
             if (supportGoal) {
-              messages.push({
+              supportGoal.messages.push({
                 id: crypto.randomUUID(), body: args.p_body, sender: args.p_sender, created_at: new Date().toISOString(),
               })
             }
@@ -115,22 +112,22 @@ export function createSupabaseFixture(now = Date.now) {
           case rpcPath + 'asayell_get_owner_goal':
             await route.fulfill({
               json: ownerGoal ? [{
-                ...publicFields(ownerGoal), is_unlocked: unlocked, message_count: messages.length, is_public: ownerGoal.is_public,
+                ...publicFields(ownerGoal), is_unlocked: unlocked, message_count: ownerGoal.messages.length, is_public: ownerGoal.is_public,
               }] : [],
             })
             break
           case rpcPath + 'asayell_get_owner_messages':
             expect(typeof args.p_demo).toBe('boolean')
-            await route.fulfill({ json: ownerGoal && (unlocked || args.p_demo) ? messages : [] })
+            await route.fulfill({ json: ownerGoal && (unlocked || args.p_demo) ? ownerGoal.messages : [] })
             break
           case rpcPath + 'asayell_set_public':
             if (ownerGoal) ownerGoal.is_public = args.p_is_public ?? false
             await route.fulfill({ json: Boolean(ownerGoal) })
             break
           case rpcPath + 'asayell_hide_message': {
-            const index = messages.findIndex(({ id }) => id === args.p_message_id)
-            const hidden = Boolean(ownerGoal) && index !== -1
-            if (hidden) messages.splice(index, 1)
+            const index = ownerGoal?.messages.findIndex(({ id }) => id === args.p_message_id) ?? -1
+            const hidden = index >= 0
+            if (hidden) ownerGoal?.messages.splice(index, 1)
             await route.fulfill({ json: hidden })
             break
           }
