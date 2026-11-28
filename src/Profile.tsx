@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { goalCategoryLabels, type AsayellRepository, type ProfileGoal } from './repository'
+import { useEffect, useState, type FormEvent } from 'react'
+import { accountNameLimit, goalCategoryLabels, normalizeAccountName, type AsayellRepository, type ProfileGoal } from './repository'
 import { routePath } from './routes'
 
 const wakeDate = new Intl.DateTimeFormat('ja-JP', {
@@ -62,7 +62,70 @@ function ProfileCard({ goal, repository }: { goal: ProfileGoal; repository: Asay
   )
 }
 
+function AccountNameForm({ repository }: { repository: AsayellRepository }) {
+  const [name, setName] = useState('')
+  const [loaded, setLoaded] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [status, setStatus] = useState('')
+
+  useEffect(() => {
+    let active = true
+    void repository.getProfile().then((profile) => {
+      if (!active) return
+      setName(profile?.accountName ?? '')
+      setLoaded(true)
+    }).catch(() => {
+      if (active) setError('アカウント名を読み込めませんでした。もう一度ページを開いてください。')
+    })
+    return () => { active = false }
+  }, [repository])
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!loaded || saving) return
+    setError('')
+    setStatus('')
+    setSaving(true)
+    try {
+      const profile = await repository.setProfile(normalizeAccountName(name))
+      setName(profile.accountName)
+      setStatus('アカウント名を保存しました。')
+    } catch (cause) {
+      setError(cause instanceof RangeError
+        ? cause.message
+        : 'アカウント名を保存できませんでした。もう一度お試しください。')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form className="goal-form account-name-form" onSubmit={save} aria-busy={(!loaded && !error) || saving}>
+      <label>
+        アカウント名 <span className="hint">（{accountNameLimit}文字まで）</span>
+        <input name="accountName" value={name} required disabled={!loaded || saving}
+          onChange={(event) => { setName(event.target.value); setStatus(''); setError('') }} />
+      </label>
+      {error && <p className="feedback" role="alert">{error}</p>}
+      {status && <p role="status">{status}</p>}
+      <button className="action" type="submit" disabled={!loaded || saving}>
+        {saving ? '保存中…' : 'アカウント名を保存する'}
+      </button>
+    </form>
+  )
+}
+
 export function Profile({ repository }: { repository: AsayellRepository }) {
+  return (
+    <>
+      <AccountNameForm repository={repository} />
+      <ProfileGoals repository={repository} />
+    </>
+  )
+}
+
+function ProfileGoals({ repository }: { repository: AsayellRepository }) {
   const [profile, setProfile] = useState<ProfileState>({ kind: 'loading' })
 
   useEffect(() => {

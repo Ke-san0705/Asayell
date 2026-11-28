@@ -1,14 +1,12 @@
-export const goalLimits = { nickname: 20, title: 100 }
+export const goalLimits = { title: 100 }
 
 interface RegistrationFields {
-  nickname: string
   title: string
   time: string
 }
 
-export function isValidRegistration({ nickname, title, time }: RegistrationFields) {
-  return nickname.trim().length > 0 && nickname.length <= goalLimits.nickname &&
-    title.trim().length > 0 && title.length <= goalLimits.title &&
+export function isValidRegistration({ title, time }: RegistrationFields) {
+  return title.trim().length > 0 && title.length <= goalLimits.title &&
     /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)
 }
 

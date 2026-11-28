@@ -14,11 +14,18 @@ async function expectRegistrationCategories(page: Page, category?: '夢' | '楽�
   await expect(page.getByRole('radio', { name: '目標', exact: true })).toBeChecked()
   await expect(page.getByLabel('詳細')).toHaveCount(0)
   await expect(page.getByRole('checkbox', { name: 'みんなに公開する' }))
-    .toHaveAccessibleDescription(/^起床予定時刻まで、ニックネーム・目標タイトル・起床予定が公開されます。/)
+    .toHaveAccessibleDescription(/^起床予定時刻まで、アカウント名・目標タイトル・起床予定が公開されます。/)
   if (category) {
     await page.getByText(category, { exact: true }).click()
     await expect(page.getByRole('radio', { name: category, exact: true })).toBeChecked()
   }
+}
+
+async function saveAccountName(page: Page, name: string) {
+  await page.goto('/Asayell/me')
+  await page.getByLabel('アカウント名').fill(name)
+  await page.getByRole('button', { name: 'アカウント名を保存する' }).click()
+  await expect(page.getByText('アカウント名を保存しました。')).toBeVisible()
 }
 
 async function registerGoal(
@@ -31,10 +38,10 @@ async function registerGoal(
         timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit',
       })
     : '07:00'
+  await saveAccountName(page, nickname)
   await page.goto('/Asayell/')
   const register = page.getByRole('button', { name: '目標を登録する' })
   await expect(register).toBeDisabled()
-  await page.getByLabel('ニックネーム').fill(nickname)
   await page.getByLabel('夢・目標・楽しみ').fill(goalTitle)
   await expectRegistrationCategories(page, category)
   await page.getByLabel('起床予定時刻').fill(wakeTime)
@@ -468,10 +475,10 @@ test('R4-04: categorized registration reaches a separate browser and the owner i
       has: visitorPage.getByRole('heading', { name: goalTitle, exact: true }),
     })
 
+    await saveAccountName(page, 'R4-04 動作確認')
     await page.goto('/Asayell/')
     const visibility = page.getByRole('checkbox', { name: 'みんなに公開する' })
     await expect(visibility).not.toBeChecked()
-    await page.getByLabel('ニックネーム').fill('R4-04 動作確認')
     await page.getByLabel('夢・目標・楽しみ').fill(goalTitle)
     await expectRegistrationCategories(page, '楽しみ')
     await page.getByLabel('起床予定時刻').fill(wakeTime)
@@ -625,4 +632,40 @@ test('R4-04: categorized registration reaches a separate browser and the owner i
       }
     }
   }
+})
+
+
+test('R5-01: registration requires an account name and changes persist after reload', async ({ page, context }, testInfo) => {
+  test.skip(testInfo.project.name === 'pages', 'The account setup is verified with local storage and the RPC fixture.')
+  if (testInfo.project.name === 'supabase') await createSupabaseFixture().install(context)
+
+  await page.goto('/Asayell/')
+  await page.getByLabel('夢・目標・楽しみ').fill('朝の散歩')
+  await page.getByLabel('起床予定時刻').fill('07:00')
+  await expect(page.getByRole('button', { name: '目標を登録する' })).toBeDisabled()
+  await expect(page.getByLabel('ニックネーム')).toHaveCount(0)
+  await page.locator('form').getByRole('link', { name: 'プロフィール' }).click()
+
+  const input = page.getByLabel('アカウント名')
+  const save = page.getByRole('button', { name: 'アカウント名を保存する' })
+  await input.fill('あ'.repeat(21))
+  await save.click()
+  await expect(page.getByRole('alert')).toHaveText('アカウント名は1〜20文字で入力してください。')
+
+  await input.fill('🌅'.repeat(20))
+  await save.click()
+  await expect(page.getByText('アカウント名を保存しました。')).toBeVisible()
+  await page.goBack()
+  await expect(page.getByText('アカウント名 ' + '🌅'.repeat(20))).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+  await page.getByRole('link', { name: 'プロフィール' }).click()
+  await page.reload()
+  await expect(input).toHaveValue('🌅'.repeat(20))
+  await input.fill('朝さん')
+  await save.click()
+  await expect(page.getByText('アカウント名を保存しました。')).toBeVisible()
+  await page.reload()
+  await expect(input).toHaveValue('朝さん')
+  await page.getByRole('link', { name: '投稿' }).click()
+  await expect(page.getByText('アカウント名 朝さん')).toBeVisible()
 })

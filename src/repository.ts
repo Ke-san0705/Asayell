@@ -12,6 +12,25 @@ export interface GoalInput {
   wake_at: string
 }
 
+export type CreateGoalInput = Omit<GoalInput, 'nickname'> & {
+  /** Legacy nickname. When omitted, use the account name for this device. */
+  nickname?: string
+}
+
+export interface Profile {
+  accountName: string
+}
+
+export const accountNameLimit = 20
+
+export function normalizeAccountName(value: string) {
+  const name = value.trim()
+  if (!name || [...name].length > accountNameLimit || name.includes('\0')) {
+    throw new RangeError('アカウント名は1〜20文字で入力してください。')
+  }
+  return name
+}
+
 export interface Goal extends GoalInput {
   category: GoalCategory
   goal_id: string
@@ -21,7 +40,7 @@ export interface Goal extends GoalInput {
 
 export type StoredGoal = Omit<Goal, 'category'> & Pick<GoalInput, 'category'>
 
-type LocalStoredGoal = StoredGoal & { created_at?: number }
+type LocalStoredGoal = StoredGoal & { created_at?: number; owner_device_id?: string }
 
 export type SupportGoal = Pick<Goal, 'nickname' | 'title' | 'detail' | 'category'>
 export type PublicGoal = Pick<Goal, 'nickname' | 'title' | 'detail' | 'wake_at' | 'support_token' | 'category'> & {
@@ -70,7 +89,9 @@ export type SupportMessageInput = Pick<MessageInput, 'sender' | 'body'>
 export type InboxMessage = Pick<Message, 'sender' | 'body' | 'created_at'> & { message_id?: string }
 
 export interface AsayellRepository {
-  createGoal(input: GoalInput): Promise<Goal>
+  getProfile(): Promise<Profile | null>
+  setProfile(accountName: string): Promise<Profile>
+  createGoal(input: CreateGoalInput): Promise<Goal>
   getGoalById(goalId: string): Promise<Goal | null>
   getGoalBySupportToken(token: string): Promise<SupportGoal | null>
   getGoalByOwnerToken(token: string): Promise<OwnerGoal | null>
@@ -95,6 +116,16 @@ function createToken() {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
+export function getOrCreateDeviceId(storage: RepositoryStorage = window.localStorage) {
+  const key = 'asayell:device-id'
+  const saved = storage.getItem(key)
+  if (saved && /^[0-9a-f]{32}$/.test(saved)) return saved
+
+  const deviceId = createToken()
+  storage.setItem(key, deviceId)
+  return deviceId
+}
+
 export function createGoalTokens() {
   const support_token = createToken()
   let owner_token = createToken()
@@ -102,8 +133,9 @@ export function createGoalTokens() {
   return { support_token, owner_token }
 }
 
-export function validateGoal({ nickname, title, detail, wake_at }: GoalInput) {
-  if (!nickname.trim() || nickname.length > 20 || !title.trim() || title.length > 100 ||
+export function validateGoal({ nickname, title, detail, wake_at }: CreateGoalInput) {
+  if ((nickname !== undefined && (!nickname.trim() || [...nickname].length > accountNameLimit)) ||
+      !title.trim() || title.length > 100 ||
       (detail !== undefined && detail.length > 300)) {
     throw new RangeError('目標の入力内容を確認してください。')
   }
@@ -141,9 +173,28 @@ export class LocalStorageRepository implements AsayellRepository {
     }
   }
 
-  async createGoal(input: GoalInput): Promise<Goal> {
-    const { nickname, title, detail, wake_at } = input
+  private profileKey(deviceId: string) {
+    return 'asayell:profile:' + deviceId
+  }
+
+  async getProfile(): Promise<Profile | null> {
+    return this.read<Profile>(this.profileKey(getOrCreateDeviceId(this.store)))
+  }
+
+  async setProfile(accountName: string): Promise<Profile> {
+    const profile = { accountName: normalizeAccountName(accountName) }
+    this.store.setItem(this.profileKey(getOrCreateDeviceId(this.store)), JSON.stringify(profile))
+    return profile
+  }
+
+  async createGoal(input: CreateGoalInput): Promise<Goal> {
     validateGoal(input)
+    const { title, detail, wake_at } = input
+    const ownerDeviceId = input.nickname === undefined ? getOrCreateDeviceId(this.store) : undefined
+    const nickname = ownerDeviceId
+      ? this.read<Profile>(this.profileKey(ownerDeviceId))?.accountName
+      : input.nickname
+    if (nickname === undefined) throw new Error('アカウント名を設定してください。')
 
     const goal: Goal = {
       nickname, title, detail, wake_at, category: input.category ?? defaultGoalCategory,
@@ -151,7 +202,7 @@ export class LocalStorageRepository implements AsayellRepository {
       goal_id: crypto.randomUUID(),
       ...createGoalTokens(),
     }
-    this.store.setItem(goalPrefix + goal.goal_id, JSON.stringify({ ...goal, created_at: Date.now() }))
+    this.store.setItem(goalPrefix + goal.goal_id, JSON.stringify({ ...goal, created_at: Date.now(), owner_device_id: ownerDeviceId }))
     return goal
   }
 

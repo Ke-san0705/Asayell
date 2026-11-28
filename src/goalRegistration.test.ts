@@ -12,12 +12,9 @@ it.each([
 })
 
 it('checks required fields and character limits before submission', () => {
-  const valid = { nickname: 'あ'.repeat(20), title: 'い'.repeat(100), time: '07:00' }
+  const valid = { title: 'い'.repeat(100), time: '07:00' }
   expect(isValidRegistration(valid)).toBe(true)
-  for (const field of ['nickname', 'title'] as const) {
-    expect(isValidRegistration({ ...valid, [field]: valid[field] + ' ' })).toBe(false)
-  }
-  expect(isValidRegistration({ ...valid, nickname: ' ' })).toBe(false)
+  expect(isValidRegistration({ ...valid, title: valid.title + ' ' })).toBe(false)
   expect(isValidRegistration({ ...valid, title: '' })).toBe(false)
   expect(isValidRegistration({ ...valid, time: '' })).toBe(false)
   expect(isValidRegistration({ ...valid, time: '24:00' })).toBe(false)

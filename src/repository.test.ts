@@ -125,3 +125,34 @@ it('defaults legacy goals without a category to 目標', async () => {
   expect(await repository.getGoalBySupportToken('support')).toMatchObject({ category: 'goal' })
   expect(await repository.listOwnerGoals()).toMatchObject([{ category: 'goal' }])
 })
+
+it('keeps a random device identity and account name across repository instances', async () => {
+  const { entries, storage, repository } = setup()
+  expect(await repository.getProfile()).toBeNull()
+  const deviceId = entries.get('asayell:device-id')
+  expect(deviceId).toMatch(/^[0-9a-f]{32}$/)
+  const separate = setup()
+  await separate.repository.getProfile()
+  expect(separate.entries.get('asayell:device-id')).not.toBe(deviceId)
+
+  const input = { title: goalInput.title, wake_at: goalInput.wake_at }
+  await expect(repository.createGoal(input)).rejects.toThrow('アカウント名')
+  const legacy = await repository.createGoal(goalInput)
+  await expect(repository.setProfile('   ')).rejects.toThrow(RangeError)
+  await expect(repository.setProfile('🌅'.repeat(21))).rejects.toThrow(RangeError)
+  await repository.setProfile('🌅'.repeat(20))
+  const reopened = new LocalStorageRepository(storage)
+  expect(await reopened.getProfile()).toEqual({ accountName: '🌅'.repeat(20) })
+  expect(entries.get('asayell:device-id')).toBe(deviceId)
+  const first = await reopened.createGoal(input)
+  expect(first.nickname).toBe('🌅'.repeat(20))
+
+  await reopened.setProfile('あさの名前')
+  expect(await reopened.getProfile()).toEqual({ accountName: 'あさの名前' })
+  expect((await reopened.createGoal(input)).nickname).toBe('あさの名前')
+  expect((await reopened.getGoalByOwnerToken(first.owner_token))?.nickname).toBe(first.nickname)
+  expect(await reopened.listOwnerGoals()).toEqual(expect.arrayContaining([
+    expect.objectContaining({ ownerToken: legacy.owner_token }),
+    expect.objectContaining({ ownerToken: first.owner_token }),
+  ]))
+})
