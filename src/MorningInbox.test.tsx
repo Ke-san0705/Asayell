@@ -45,16 +45,22 @@ it('waits to fetch messages until the scheduled instant and shows one at a time'
   const goal = await createGoal()
   await repository.createMessage({ goal_id: goal.goal_id, sender: 'はる', body: '一通目のエール' })
   await repository.createMessage({ goal_id: goal.goal_id, body: '二通目のエール' })
+  const hidden = await repository.createMessage({ goal_id: goal.goal_id, body: '非表示のエール' })
+  await repository.hideMessage(goal.owner_token, hidden.message_id)
   const listMessages = vi.spyOn(repository, 'listMessages')
 
   await open('/Asayell/o/' + goal.owner_token)
   expect(container.textContent).toContain('明日の朝にエールが届きます')
+  expect(container.textContent).toContain('2件のエールが届いています')
+  expect(container.textContent).not.toContain('はる')
+  expect(container.textContent).not.toContain('非表示のエール')
   expect(container.textContent).not.toContain('一通目のエール')
   expect(container.textContent).not.toContain('二通目のエール')
   expect(listMessages).not.toHaveBeenCalled()
 
   await act(async () => vi.advanceTimersByTimeAsync(1))
   expect(container.textContent).toContain('おはようございます')
+  expect(container.textContent).not.toContain('2件のエールが届いています')
   expect(container.textContent).toContain('受信前アンケート')
   expect(container.querySelector('blockquote')).toBeNull()
   await press('回答せずにエールを読む')
@@ -79,6 +85,20 @@ it('waits to fetch messages until the scheduled instant and shows one at a time'
   expect(container.textContent).toContain('受信後アンケート')
   await press('回答せずに終了する')
   expect(container.querySelector('button')).toBeNull()
+})
+
+it.each(['empty', 'unavailable'])('keeps the waiting screen usable when the count is %s', async (state) => {
+  vi.setSystemTime(Date.parse(wakeAt) - 60_000)
+  const goal = await createGoal()
+  if (state === 'unavailable') {
+    vi.spyOn(repository, 'getMessageCount').mockRejectedValueOnce(new Error('Count RPC unavailable'))
+  }
+
+  await open('/Asayell/o/' + goal.owner_token)
+  expect(container.textContent).toContain('起床予定時刻になったら、ここで読めます')
+  expect(container.textContent).toContain('デモ：翌朝を体験する')
+  expect(container.textContent).not.toContain('件のエールが届いています')
+  expect(container.querySelector('blockquote')).toBeNull()
 })
 
 it('shows the fixed encouragement and no message controls when the inbox is empty', async () => {

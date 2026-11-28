@@ -188,3 +188,13 @@ it('uses the survey RPCs with owner token, phase, demo flag and post-only intent
     [path + 'asayell_get_survey_status', { p_owner_token: 'owner' }],
   ])
 })
+
+it('requests only the scalar message count for the owner token', async () => {
+  const url = 'https://example.supabase.co'
+  const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json(2))
+  const repository = new SupabaseRepository(url, 'anon', undefined, request)
+
+  expect(await repository.getMessageCount('owner')).toBe(2)
+  expect(request).toHaveBeenCalledExactlyOnceWith(url + '/rest/v1/rpc/asayell_get_message_count',
+    expect.objectContaining({ method: 'POST', body: JSON.stringify({ p_owner_token: 'owner' }) }))
+})
