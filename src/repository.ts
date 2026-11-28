@@ -21,6 +21,8 @@ export interface Goal extends GoalInput {
 
 export type StoredGoal = Omit<Goal, 'category'> & Pick<GoalInput, 'category'>
 
+type LocalStoredGoal = StoredGoal & { created_at?: number }
+
 export type SupportGoal = Pick<Goal, 'nickname' | 'title' | 'detail' | 'category'>
 export type PublicGoal = Pick<Goal, 'nickname' | 'title' | 'detail' | 'wake_at' | 'support_token' | 'category'> & {
   message_count: number
@@ -149,13 +151,17 @@ export class LocalStorageRepository implements AsayellRepository {
       goal_id: crypto.randomUUID(),
       ...createGoalTokens(),
     }
-    this.store.setItem(goalPrefix + goal.goal_id, JSON.stringify(goal))
+    this.store.setItem(goalPrefix + goal.goal_id, JSON.stringify({ ...goal, created_at: Date.now() }))
     return goal
+  }
+
+  private toGoal({ goal_id, support_token, owner_token, nickname, title, detail, wake_at, category, isPublic }: StoredGoal): Goal {
+    return { goal_id, support_token, owner_token, nickname, title, detail, wake_at, category: category ?? defaultGoalCategory, isPublic }
   }
 
   async getGoalById(goalId: string): Promise<Goal | null> {
     const goal = this.read<StoredGoal>(goalPrefix + goalId)
-    return goal && { ...goal, category: goal.category ?? defaultGoalCategory }
+    return goal && this.toGoal(goal)
   }
 
   async getGoalBySupportToken(token: string): Promise<(SupportGoal & Pick<Goal, 'goal_id'>) | null> {
@@ -168,13 +174,16 @@ export class LocalStorageRepository implements AsayellRepository {
     return null
   }
 
-  async getGoalByOwnerToken(token: string): Promise<Goal | null> {
-    for (const goal of this.records<StoredGoal>(goalPrefix)) {
-      if (goal.owner_token === token) {
-        return { ...goal, category: goal.category ?? defaultGoalCategory, isPublic: goal.isPublic ?? false }
-      }
+  private findStoredGoalByOwnerToken(token: string): LocalStoredGoal | null {
+    for (const goal of this.records<LocalStoredGoal>(goalPrefix)) {
+      if (goal.owner_token === token) return goal
     }
     return null
+  }
+
+  async getGoalByOwnerToken(token: string): Promise<Goal | null> {
+    const goal = this.findStoredGoalByOwnerToken(token)
+    return goal && { ...this.toGoal(goal), isPublic: goal.isPublic ?? false }
   }
 
   async listOwnerGoals(): Promise<ProfileGoal[]> {
@@ -186,17 +195,13 @@ export class LocalStorageRepository implements AsayellRepository {
 
   async listPublicGoals(limit = 20): Promise<PublicGoal[]> {
     const now = Date.now()
-    const goals = [...this.records<StoredGoal>(goalPrefix)]
+    const goals = [...this.records<LocalStoredGoal>(goalPrefix)]
       .filter((goal) => goal.isPublic === true && Date.parse(goal.wake_at) > now)
+      // Prefer later storage entries for legacy records and equal timestamps.
+      .reverse()
+      .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0))
 
-    // Sample without replacement, matching the RPC's random ordering.
-    const count = Math.min(goals.length, Math.min(Math.max(Math.trunc(limit), 1), 50))
-    for (let index = 0; index < count; index += 1) {
-      const other = index + Math.floor(Math.random() * (goals.length - index))
-      const goal = goals[index]
-      goals[index] = goals[other]
-      goals[other] = goal
-    }
+    const count = Math.min(Math.max(Math.trunc(limit), 1), 50)
     return Promise.all(goals.slice(0, count).map(async (goal) => {
       const { nickname, title, detail, wake_at, support_token } = goal
       const messages = await this.listMessages(goal.goal_id)
@@ -208,9 +213,9 @@ export class LocalStorageRepository implements AsayellRepository {
   }
 
   async setPublic(ownerToken: string, isPublic: boolean): Promise<void> {
-    const goal = await this.getGoalByOwnerToken(ownerToken)
+    const goal = this.findStoredGoalByOwnerToken(ownerToken)
     if (!goal) throw new Error('目標が見つかりません。')
-    this.store.setItem(goalPrefix + goal.goal_id, JSON.stringify({ ...goal, isPublic }))
+    this.store.setItem(goalPrefix + goal.goal_id, JSON.stringify({ ...goal, category: goal.category ?? defaultGoalCategory, isPublic }))
   }
 
   async hideMessage(ownerToken: string, messageId: string): Promise<void> {

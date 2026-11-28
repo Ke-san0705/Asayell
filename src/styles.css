@@ -420,11 +420,8 @@ h1 {
 }
 
 .public-feed {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  height: 100dvh;
   padding-top: env(safe-area-inset-top);
-  padding-bottom: var(--bottom-navigation-height);
+  padding-bottom: calc(var(--bottom-navigation-height) + 1rem);
 }
 
 .feed-header {
@@ -442,19 +439,19 @@ h1 {
   font-size: 1.125rem;
 }
 
-.feed-reels {
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  scroll-snap-type: y mandatory;
+.feed-list {
+  display: grid;
+  gap: 1rem;
+  width: min(100%, 38rem);
+  margin-inline: auto;
+  padding: 0.5rem clamp(1rem, 5vw, 2rem);
 }
 
-.feed-reel {
-  display: grid;
+.feed-goal-header {
+  display: flex;
   align-items: center;
-  min-height: 100%;
-  padding: 0.5rem clamp(1rem, 5vw, 2rem);
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
 }
 
 .feed-goal,
@@ -495,7 +492,7 @@ h1 {
 }
 
 .feed-status {
-  align-self: center;
+  margin-block-start: 0.5rem;
   width: min(calc(100% - 2rem), 34rem);
 }
 
