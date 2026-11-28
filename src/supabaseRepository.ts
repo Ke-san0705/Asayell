@@ -214,6 +214,10 @@ export class SupabaseRepository implements AsayellRepository {
     return rows.map(({ phase }) => phase)
   }
 
+  async getMessageCount(ownerToken: string): Promise<number> {
+    return this.rpc<number>('asayell_get_message_count', { p_owner_token: ownerToken })
+  }
+
   async listOwnerMessages(ownerToken: string, demo = false): Promise<InboxMessage[]> {
     const rows = await this.rpc<MessageRow[]>('asayell_get_owner_messages', {
       p_owner_token: ownerToken,

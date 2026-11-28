@@ -120,6 +120,7 @@ export interface AsayellRepository {
   setPublic(ownerToken: string, isPublic: boolean): Promise<void>
   hideMessage(ownerToken: string, messageId: string): Promise<void>
   postMessage(supportToken: string, input: SupportMessageInput): Promise<void>
+  getMessageCount(ownerToken: string): Promise<number>
   listOwnerMessages(ownerToken: string, demo?: boolean): Promise<InboxMessage[]>
   saveSurveyResponse(ownerToken: string, response: SurveyResponse): Promise<void>
   getSurveyStatus(ownerToken: string): Promise<SurveyPhase[]>
@@ -337,6 +338,11 @@ export class LocalStorageRepository implements AsayellRepository {
     await this.createMessage({ ...input, goal_id: goal.goal_id })
   }
 
+  async getMessageCount(ownerToken: string): Promise<number> {
+    const goal = this.findStoredGoalByOwnerToken(ownerToken)
+    return goal ? this.visibleMessages(goal.goal_id).length : 0
+  }
+
   async listOwnerMessages(ownerToken: string, demo = false): Promise<InboxMessage[]> {
     const goal = await this.getGoalByOwnerToken(ownerToken)
     if (!goal || (!demo && Date.now() < Date.parse(goal.wake_at))) return []
@@ -389,9 +395,13 @@ export class LocalStorageRepository implements AsayellRepository {
       .sort((first, second) => first.created_at.localeCompare(second.created_at))
   }
 
-  async listMessages(goalId: string): Promise<Message[]> {
+  private visibleMessages(goalId: string): Message[] {
     return [...this.records<Message>(messagePrefix(goalId))]
       .filter((message) => message.status === 'visible')
+  }
+
+  async listMessages(goalId: string): Promise<Message[]> {
+    return this.visibleMessages(goalId)
       .sort((first, second) => first.created_at.localeCompare(second.created_at))
   }
 }

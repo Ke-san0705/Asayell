@@ -138,6 +138,7 @@ export function MorningInbox({ ownerToken, repository }: MorningInboxProps) {
         <>
           <p className="morning-greeting">{inbox.nickname}さんへ</p>
           <p className="inbox-note">明日の朝にエールが届きます。起床予定時刻になったら、ここで読めます。</p>
+          <WaitingMessageCount ownerToken={ownerToken} repository={repository} />
           <button className="action secondary inbox-action" type="button" ref={demoButton}
             onClick={() => setDemo({ nickname: inbox.nickname })}>
             デモ：翌朝を体験する
@@ -160,6 +161,29 @@ export function MorningInbox({ ownerToken, repository }: MorningInboxProps) {
       )}
     </div>
   )
+}
+
+function WaitingMessageCount({ ownerToken, repository }: MorningInboxProps) {
+  const [count, setCount] = useState(0)
+
+  useEffect(() => {
+    let active = true
+
+    async function loadCount() {
+      try {
+        const count = await repository.getMessageCount(ownerToken)
+        if (active) setCount(count)
+      } catch {
+        // Keep the waiting screen available if the count RPC is unavailable.
+        if (active) setCount(0)
+      }
+    }
+
+    void loadCount()
+    return () => { active = false }
+  }, [ownerToken, repository])
+
+  return count > 0 ? <p className="inbox-note">{count}件のエールが届いています</p> : null
 }
 
 interface MessageActions {
