@@ -7,9 +7,18 @@ import {
 type ProfileRow = { account_name: string }
 type GoalRow = Omit<GoalInput, 'detail' | 'isPublic'> & { detail: string | null; is_public?: boolean }
 type CreatedGoalRow = GoalRow & { id: string; support_token: string; owner_token: string }
+type DeviceGoalRow = Pick<CreatedGoalRow, 'title' | 'wake_at' | 'is_public' | 'category' | 'support_token' | 'owner_token'> & {
+  message_count: number
+}
 type OwnerGoalRow = GoalRow & { is_unlocked: boolean; message_count?: number }
 type MessageRow = Omit<InboxMessage, 'sender' | 'message_id'> & { id?: string; sender: string | null }
 type PublicGoalRow = Omit<PublicGoal, 'detail' | 'category'> & Pick<GoalRow, 'detail' | 'category'>
+
+class RpcError extends Error {
+  constructor(name: string, readonly status: number) {
+    super(`Supabase RPC ${name} failed (${status})`)
+  }
+}
 
 export class SupabaseRepository implements AsayellRepository {
   private readonly rpcUrl: string
@@ -33,7 +42,7 @@ export class SupabaseRepository implements AsayellRepository {
       },
       body: JSON.stringify(args),
     })
-    if (!response.ok) throw new Error(`Supabase RPC ${name} failed (${response.status})`)
+    if (!response.ok) throw new RpcError(name, response.status)
     return response.json() as Promise<T>
   }
 
@@ -114,19 +123,38 @@ export class SupabaseRepository implements AsayellRepository {
 
   async listOwnerGoals(): Promise<ProfileGoal[]> {
     const storage = this.storage ?? window.localStorage
+    const rows = await this.rpc<DeviceGoalRow[]>('asayell_list_my_goals', {
+      p_device_id: getOrCreateDeviceId(storage),
+    }).catch((error: unknown) => {
+      // Keep owner-token receipts usable before the profile migration is applied.
+      if (error instanceof RpcError && error.status === 404) return []
+      throw error
+    })
+    const deviceGoals: ProfileGoal[] = rows.map((row) => ({
+      ownerToken: row.owner_token,
+      supportToken: row.support_token,
+      title: row.title,
+      category: row.category ?? defaultGoalCategory,
+      wakeAt: row.wake_at,
+      isPublic: row.is_public ?? false,
+      messageCount: row.message_count,
+    }))
+    const deviceOwnerTokens = new Set(deviceGoals.map((goal) => goal.ownerToken))
     const savedGoals: StoredGoal[] = []
     for (let index = 0; index < storage.length; index += 1) {
       const key = storage.key(index)
       if (!key?.startsWith(this.sharePrefix)) continue
       const value = storage.getItem(key)
-      if (value !== null) savedGoals.push(JSON.parse(value) as StoredGoal)
+      if (value === null) continue
+      const saved = JSON.parse(value) as StoredGoal
+      if (!deviceOwnerTokens.has(saved.owner_token)) savedGoals.push(saved)
     }
 
     const goals = await Promise.all(savedGoals.map(async (saved) => {
       const current = await this.getGoalByOwnerToken(saved.owner_token)
       return current ? toProfileGoal(saved, current) : null
     }))
-    return goals.filter((goal) => goal !== null)
+    return [...deviceGoals, ...goals.filter((goal) => goal !== null)]
   }
 
   async listPublicGoals(limit = 20): Promise<PublicGoal[]> {

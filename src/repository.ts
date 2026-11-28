@@ -50,7 +50,7 @@ export type PublicGoal = Pick<Goal, 'nickname' | 'title' | 'detail' | 'wake_at' 
 export type OwnerGoal = GoalInput & { category: GoalCategory; is_unlocked?: boolean; message_count?: number }
 
 export interface ProfileGoal {
-  goalId: string
+  goalId?: string
   ownerToken: string
   supportToken: string
   title: string

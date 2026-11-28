@@ -505,6 +505,24 @@ test('R4-04: categorized registration reaches a separate browser and the owner i
     await expect(profile).not.toContainText(ownerUrl)
     await expect(profile.getByRole('button', { name: '応援募集URLをコピー' })).toBeVisible()
 
+    if (fixture) {
+      await expect(profile).toHaveCount(1)
+      const storageState = await context.storageState()
+      for (const origin of storageState.origins) {
+        origin.localStorage = origin.localStorage.filter(({ name }) => name === 'asayell:device-id')
+      }
+      const sameDevice = await browser.newContext({ baseURL, storageState })
+      try {
+        await fixture.install(sameDevice)
+        const devicePage = await sameDevice.newPage()
+        await devicePage.goto('/Asayell/me')
+        const deviceGoal = devicePage.getByRole('article').filter({ hasText: goalTitle })
+        await expect(deviceGoal.getByRole('button', { name: '受信画面を開く' })).toBeVisible()
+      } finally {
+        await sameDevice.close()
+      }
+    }
+
     await visitorPage.goto('/Asayell/me')
     await expect(visitorPage.getByText(/このブラウザには登録した夢の控えがありません/)).toBeVisible()
 
@@ -555,18 +573,18 @@ test('R4-04: categorized registration reaches a separate browser and the owner i
     await page.goto('/Asayell/')
     await nav.getByRole('link', { name: 'みんなの夢' }).click()
     await expect(page.getByRole('heading', { name: 'みんなの夢', exact: true })).toBeVisible()
-    const ownerGoal = waitForRpc(page, 'asayell_get_owner_goal')
     await nav.getByRole('link', { name: 'プロフィール' }).click()
+    await expect(profile.getByText('届いた応援 1件')).toBeVisible()
+    await expect(profile.locator('time')).toBeVisible()
+    const toggle = profile.getByRole('checkbox', { name: 'みんなの夢に公開' })
+    await expect(toggle).toBeChecked()
+    const ownerGoal = waitForRpc(page, 'asayell_get_owner_goal')
+    await profile.getByRole('button', { name: '受信画面を開く' }).click()
     const ownerResponse = await ownerGoal
     expect(ownerResponse.ok()).toBe(true)
     expect(await ownerResponse.json(), 'asayell_get_owner_goal must return is_public').toMatchObject([
       { title: goalTitle, is_public: true, is_unlocked: false, message_count: 1 },
     ])
-    await expect(profile.getByText('届いた応援 1件')).toBeVisible()
-    await expect(profile.locator('time')).toBeVisible()
-    const toggle = profile.getByRole('checkbox', { name: 'みんなの夢に公開' })
-    await expect(toggle).toBeChecked()
-    await profile.getByRole('button', { name: '受信画面を開く' }).click()
     await expect(page).toHaveURL(ownerUrl)
     await expect(page.getByText(/明日の朝にエールが届きます/)).toBeVisible()
     await expect(page.getByText(body, { exact: true })).toHaveCount(0)
