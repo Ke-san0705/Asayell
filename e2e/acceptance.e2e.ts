@@ -188,7 +188,7 @@ test('public feed links to support and excludes private or expired goals', async
   const owner = await registerGoal(page, false)
   const ownerUrl = (await owner.getAttribute('href'))!
   await page.goto('/Asayell/')
-  await page.getByRole('link', { name: 'みんなの夢を見る' }).click()
+  await page.getByRole('link', { name: 'みんなの夢', exact: true }).click()
   const empty = page.getByText('公開中の夢はまだありません。')
   const support = page.getByRole('link', { name: '応援する' })
   await expect(page).toHaveURL(/\/Asayell\/feed$/)
@@ -247,4 +247,82 @@ test('public feed snaps to the next full-height reel', async ({ page }, testInfo
   await feed.hover()
   await page.mouse.wheel(0, Math.round(height * 0.75))
   await expect.poll(() => feed.evaluate(element => element.scrollTop)).toBe(height)
+})
+
+test('primary navigation and device profile manage a registered goal', async ({ page, context, browser }, testInfo) => {
+  test.skip(testInfo.project.name === 'pages', 'The profile is tested with local storage and the RPC fixture.')
+  const now = new Date('2026-11-28T20:00:00+09:00')
+  const fixture = testInfo.project.name === 'supabase' ? createSupabaseFixture(() => now.getTime()) : undefined
+  await fixture?.install(context)
+  const owner = await registerGoal(page, false, true)
+  const ownerUrl = (await owner.getAttribute('href'))!
+  const ownerToken = new URL(ownerUrl).pathname.split('/').at(-1)!
+  await page.goto('/Asayell/')
+
+  const nav = page.getByRole('navigation', { name: 'メインナビゲーション' })
+  await nav.getByRole('link', { name: 'みんなの夢' }).click()
+  const support = page.getByRole('link', { name: '応援する' })
+  await expect(support).toBeVisible()
+  const supportUrl = (await support.getAttribute('href'))!
+  const navBox = (await nav.boundingBox())!
+  const supportBox = (await support.boundingBox())!
+  expect(supportBox.y + supportBox.height).toBeLessThanOrEqual(navBox.y)
+  await support.click()
+  await expect(nav).toHaveCount(0)
+  await page.getByLabel('メッセージ本文').fill(message)
+  await page.getByRole('button', { name: 'エールを投稿する' }).click()
+  await expect(page.getByRole('status')).toContainText('翌朝に届きます')
+
+  const ownerMessages: string[] = []
+  page.on('request', request => {
+    if (new URL(request.url()).pathname === rpcPath + 'asayell_get_owner_messages') {
+      ownerMessages.push(request.url())
+    }
+  })
+  await page.goBack()
+  await nav.getByRole('link', { name: 'プロフィール' }).click()
+  await expect(page).toHaveURL(/\/Asayell\/me$/)
+  await expect(page.getByRole('heading', { name: title })).toBeVisible()
+  await expect(page.locator('time')).toContainText('7:00')
+  await expect(page.getByText('届いた応援 1件')).toBeVisible()
+  await expect(page.getByRole('link', { name: /\/Asayell\/s\// })).toHaveAttribute('href', new URL(supportUrl, page.url()).href)
+  expect(await page.locator('main').innerHTML()).not.toContain(ownerToken)
+  await expect(page.getByText(message, { exact: true })).toHaveCount(0)
+  expect(ownerMessages).toEqual([])
+  await expectNoHorizontalOverflow(page)
+
+  const restoredFeed = await context.newPage()
+  await restoredFeed.clock.setFixedTime(now)
+  await restoredFeed.goto(new URL('/Asayell/feed', page.url()).href)
+  await expect(restoredFeed.getByRole('link', { name: '応援する' })).toBeVisible()
+
+  const toggle = page.getByRole('checkbox', { name: 'みんなの夢に公開' })
+  await expect(toggle).toBeChecked()
+  await toggle.click()
+  await expect(toggle).not.toBeChecked()
+  await expect(toggle).toBeEnabled()
+
+  await restoredFeed.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })))
+  await expect(restoredFeed.getByText('公開中の夢はまだありません。')).toBeVisible()
+  await restoredFeed.close()
+
+  await nav.getByRole('link', { name: 'みんなの夢' }).click()
+  await expect(page.getByText('公開中の夢はまだありません。')).toBeVisible()
+  await nav.getByRole('link', { name: '投稿' }).click()
+  await expect(page.getByRole('heading', { name: '目標登録' })).toBeVisible()
+  await nav.getByRole('link', { name: 'プロフィール' }).click()
+  await expect(toggle).not.toBeChecked()
+  await page.getByRole('button', { name: '受信画面を開く' }).click()
+  await expect(page).toHaveURL(ownerUrl)
+
+  const visitor = await browser.newContext()
+  try {
+    await fixture?.install(visitor)
+    const visitorPage = await visitor.newPage()
+    await visitorPage.goto(new URL('/Asayell/me', page.url()).href)
+    await expect(visitorPage.getByText(/本人専用の受信URLから確認できます/)).toBeVisible()
+    await expect(visitorPage.getByRole('heading', { name: title })).toHaveCount(0)
+  } finally {
+    await visitor.close()
+  }
 })

@@ -19,6 +19,8 @@ it('registers, shares and receives across browsers using only token-scoped RPCs'
   })
   const entries = new Map<string, string>()
   const storage = {
+    get length() { return entries.size },
+    key: (index: number) => [...entries.keys()][index] ?? null,
     getItem: (key: string) => entries.get(key) ?? null,
     setItem: (key: string, value: string) => { entries.set(key, value) },
   }

@@ -33,11 +33,10 @@ export function PublicFeed({ repository }: { repository: AsayellRepository }) {
   const [feed, setFeed] = useState<FeedState>({ kind: 'loading' })
 
   useEffect(() => {
-    let active = true
+    let requestId = 0
     let timer: ReturnType<typeof setTimeout> | undefined
 
     function showGoals(goals: PublicGoal[]) {
-      if (!active) return
       const now = Date.now()
       const upcoming = goals.filter(({ wake_at }) => Date.parse(wake_at) > now)
       setFeed({ kind: 'ready', goals: upcoming, now })
@@ -48,13 +47,27 @@ export function PublicFeed({ repository }: { repository: AsayellRepository }) {
       }
     }
 
-    void repository.listPublicGoals().then(showGoals).catch(() => {
-      if (active) setFeed({ kind: 'error' })
-    })
-
-    return () => {
-      active = false
+    function loadGoals() {
+      const id = ++requestId
       clearTimeout(timer)
+      setFeed({ kind: 'loading' })
+      void repository.listPublicGoals().then((goals) => {
+        if (requestId === id) showGoals(goals)
+      }).catch(() => {
+        if (requestId === id) setFeed({ kind: 'error' })
+      })
+    }
+
+    function restore(event: PageTransitionEvent) {
+      if (event.persisted) loadGoals()
+    }
+
+    loadGoals()
+    window.addEventListener('pageshow', restore)
+    return () => {
+      requestId += 1
+      clearTimeout(timer)
+      window.removeEventListener('pageshow', restore)
     }
   }, [repository])
 

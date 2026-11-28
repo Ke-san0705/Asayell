@@ -18,7 +18,29 @@ export type PublicGoal = Pick<Goal, 'nickname' | 'title' | 'detail' | 'wake_at' 
   message_count: number
 }
 
-export type OwnerGoal = GoalInput & { is_unlocked?: boolean }
+export type OwnerGoal = GoalInput & { is_unlocked?: boolean; message_count?: number }
+
+export interface ProfileGoal {
+  goalId: string
+  ownerToken: string
+  supportToken: string
+  title: string
+  wakeAt: string
+  isPublic: boolean
+  messageCount: number
+}
+
+export function toProfileGoal(saved: Goal, current: OwnerGoal): ProfileGoal {
+  return {
+    goalId: saved.goal_id,
+    ownerToken: saved.owner_token,
+    supportToken: saved.support_token,
+    title: current.title,
+    wakeAt: current.wake_at,
+    isPublic: current.isPublic ?? false,
+    messageCount: current.message_count ?? 0,
+  }
+}
 
 export interface MessageInput {
   goal_id: string
@@ -40,6 +62,7 @@ export interface AsayellRepository {
   getGoalById(goalId: string): Promise<Goal | null>
   getGoalBySupportToken(token: string): Promise<SupportGoal | null>
   getGoalByOwnerToken(token: string): Promise<OwnerGoal | null>
+  listOwnerGoals(): Promise<ProfileGoal[]>
   listPublicGoals(limit?: number): Promise<PublicGoal[]>
   setPublic(ownerToken: string, isPublic: boolean): Promise<void>
   hideMessage(ownerToken: string, messageId: string): Promise<void>
@@ -47,7 +70,7 @@ export interface AsayellRepository {
   listOwnerMessages(ownerToken: string, demo?: boolean): Promise<InboxMessage[]>
 }
 
-type RepositoryStorage = Pick<Storage, 'getItem' | 'setItem' | 'key' | 'length'>
+export type RepositoryStorage = Pick<Storage, 'getItem' | 'setItem' | 'key' | 'length'>
 
 const goalPrefix = 'asayell:goal:'
 
@@ -138,6 +161,13 @@ export class LocalStorageRepository implements AsayellRepository {
       if (goal.owner_token === token) return { ...goal, isPublic: goal.isPublic ?? false }
     }
     return null
+  }
+
+  async listOwnerGoals(): Promise<ProfileGoal[]> {
+    return Promise.all([...this.records<Goal>(goalPrefix)].map(async (goal) => {
+      const messages = await this.listMessages(goal.goal_id)
+      return toProfileGoal(goal, { ...goal, message_count: messages.length })
+    }))
   }
 
   async listPublicGoals(limit = 20): Promise<PublicGoal[]> {
