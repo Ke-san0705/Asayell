@@ -13,6 +13,7 @@ type GoalRow = {
   wake_at: string
   support_token: string | null
   owner_token: string | null
+  category: string
   is_public: boolean
 }
 type MessageRow = { id: string; body: string | null; sender: string | null; created_at: string }
@@ -38,8 +39,8 @@ export function createSupabaseFixture(now = Date.now) {
         const path = new URL(request.url()).pathname
         const supportGoal = goal && goal.support_token === args.p_support_token ? goal : undefined
         const ownerGoal = goal && goal.owner_token === args.p_owner_token ? goal : undefined
-        const publicFields = ({ nickname, title, detail, wake_at }: GoalRow) => ({
-          nickname, title, detail, wake_at,
+        const publicFields = ({ nickname, title, detail, wake_at, category }: GoalRow) => ({
+          nickname, title, detail, wake_at, category,
         })
 
         switch (path) {
@@ -52,6 +53,7 @@ export function createSupabaseFixture(now = Date.now) {
               wake_at: args.p_wake_at!,
               support_token: args.p_support_token,
               owner_token: args.p_owner_token,
+              category: args.p_category ?? 'goal',
               is_public: args.p_is_public ?? false,
             }
             await route.fulfill({ json: goal })

@@ -1,10 +1,11 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { goalLimits, isValidRegistration, nextWakeAt } from './registrationFields'
-import type { AsayellRepository } from './repository'
+import { defaultGoalCategory, goalCategoryLabels, type AsayellRepository, type GoalCategory } from './repository'
 import { routePath } from './routes'
 
 export function GoalRegistration({ repository }: { repository: AsayellRepository }) {
   const [fields, setFields] = useState({ nickname: '', title: '', detail: '', time: '' })
+  const [category, setCategory] = useState<GoalCategory>(defaultGoalCategory)
   const [isPublic, setIsPublic] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -28,6 +29,7 @@ export function GoalRegistration({ repository }: { repository: AsayellRepository
         title: fields.title.trim(),
         detail: fields.detail.trim() || undefined,
         wake_at: nextWakeAt(fields.time),
+        category,
         isPublic,
       })
       window.location.assign(routePath('share', goal.goal_id))
@@ -47,6 +49,18 @@ export function GoalRegistration({ repository }: { repository: AsayellRepository
           <input name="nickname" required maxLength={goalLimits.nickname}
             value={fields.nickname} onChange={(event) => update('nickname', event.target.value)} />
         </label>
+        <fieldset className="category-field" disabled={saving}>
+          <legend>種類</legend>
+          <div className="category-options">
+            {(Object.keys(goalCategoryLabels) as GoalCategory[]).map((option) => (
+              <label key={option}>
+                <input type="radio" name="category" value={option} checked={category === option}
+                  onChange={() => setCategory(option)} />
+                <span>{goalCategoryLabels[option]}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <label>
           夢・目標・楽しみ <span className="hint">（{goalLimits.title}文字まで）</span>
           <input name="title" required maxLength={goalLimits.title}
@@ -55,6 +69,7 @@ export function GoalRegistration({ repository }: { repository: AsayellRepository
         <label>
           詳細 <span className="hint">（任意・{goalLimits.detail}文字まで）</span>
           <textarea name="detail" rows={3} maxLength={goalLimits.detail}
+            placeholder="例）まずは布団から出て水を飲む。小さな一歩でOK"
             value={fields.detail} onChange={(event) => update('detail', event.target.value)} />
         </label>
         <label>

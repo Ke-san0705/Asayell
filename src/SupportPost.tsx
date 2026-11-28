@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import type { AsayellRepository, SupportGoal } from './repository'
+import { goalCategoryLabels, type AsayellRepository, type SupportGoal } from './repository'
 
 interface SupportPostProps {
   repository: AsayellRepository
@@ -59,7 +59,7 @@ export function SupportPost({ repository, supportToken }: SupportPostProps) {
   return (
     <>
       <section className="support-goal" aria-labelledby="support-goal-title">
-        <p>{goal.nickname}さんの目標</p>
+        <p>{goal.nickname}さんの{goalCategoryLabels[goal.category]}</p>
         <h2 id="support-goal-title">{goal.title}</h2>
         {goal.detail && <p>{goal.detail}</p>}
       </section>

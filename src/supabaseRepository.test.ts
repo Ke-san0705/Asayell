@@ -3,7 +3,7 @@ import { SupabaseRepository } from './supabaseRepository'
 
 it('registers, shares and receives across browsers using only token-scoped RPCs', async () => {
   const url = 'https://example.supabase.co'
-  const input = { nickname: 'あさ', title: '散歩', wake_at: '2026-11-29T07:00:00+09:00' }
+  const input = { nickname: 'あさ', title: '散歩', category: 'dream' as const, wake_at: '2026-11-29T07:00:00+09:00' }
   const body = '応援しています'
   const response = (data: unknown) => Response.json(data)
   const creation = vi.fn<typeof fetch>().mockImplementationOnce(async (_url, options) => {
@@ -11,7 +11,7 @@ it('registers, shares and receives across browsers using only token-scoped RPCs'
     expect(args).toEqual({
       p_nickname: input.nickname, p_title: input.title, p_detail: null, p_wake_at: input.wake_at,
       p_support_token: expect.stringMatching(/^[a-f0-9]{32}$/),
-      p_owner_token: expect.stringMatching(/^[a-f0-9]{32}$/), p_is_public: true,
+      p_owner_token: expect.stringMatching(/^[a-f0-9]{32}$/), p_is_public: true, p_category: input.category,
     })
     expect(args.p_support_token).not.toBe(args.p_owner_token)
     return response([{ ...input, detail: null, id: 'goal-id', is_public: true,
@@ -25,7 +25,7 @@ it('registers, shares and receives across browsers using only token-scoped RPCs'
     setItem: (key: string, value: string) => { entries.set(key, value) },
   }
   const goal = await new SupabaseRepository(url, 'anon', storage, creation).createGoal({ ...input, isPublic: true })
-  expect(goal).toMatchObject({ goal_id: 'goal-id', isPublic: true })
+  expect(goal).toMatchObject({ goal_id: 'goal-id', isPublic: true, category: input.category })
   const rpc = vi.fn<typeof fetch>()
     .mockResolvedValueOnce(response([{ ...input, detail: null }]))
     .mockResolvedValueOnce(response(true))
@@ -39,10 +39,10 @@ it('registers, shares and receives across browsers using only token-scoped RPCs'
   expect(await owner.getGoalById(goal.goal_id)).toEqual(goal)
   expect(await supporter.getGoalById(goal.goal_id)).toBeNull()
   expect(await supporter.getGoalBySupportToken(goal.support_token))
-    .toEqual({ nickname: input.nickname, title: input.title, detail: undefined })
+    .toEqual({ nickname: input.nickname, title: input.title, detail: undefined, category: input.category })
   await supporter.postMessage(goal.support_token, { body })
   expect(await supporter.getGoalByOwnerToken(goal.support_token)).toBeNull()
-  expect(await owner.getGoalByOwnerToken(goal.owner_token)).toMatchObject({ is_unlocked: false, isPublic: true })
+  expect(await owner.getGoalByOwnerToken(goal.owner_token)).toMatchObject({ is_unlocked: false, isPublic: true, category: input.category })
   expect(await owner.listOwnerMessages(goal.owner_token)).toEqual([])
   expect(await owner.listOwnerMessages(goal.owner_token, true)).toEqual([
     { message_id: 'message-id', sender: undefined, body, created_at: input.wake_at },
