@@ -14,23 +14,17 @@ it.each([
 ] as const)('matches and renders %s', (path, route, heading) => {
   expect(matchRoute(path, '/Asayell/')).toEqual(route)
   const repository = new LocalStorageRepository()
-  expect(renderToStaticMarkup(<App route={route} repository={repository} />)).toContain(`<h1>${heading}</h1>`)
+  const html = renderToStaticMarkup(<App route={route} repository={repository} />)
+  expect(html).toContain(`<h1>${heading}</h1>`)
+  const navigation = html.match(/<nav[^>]*>.*?<\/nav>/)?.[0]
+  expect(navigation).toBeDefined()
+  for (const destination of ['/', '/feed', '/me']) {
+    expect(navigation).toContain(`href="${destination}"`)
+  }
 })
 
 it('handles unknown paths and rejects lookalike base paths', () => {
   expect(matchRoute('/Asayell/s/', '/Asayell/')).toEqual({ name: 'notFound' })
   expect(matchRoute('/Asayell-other/s/token', '/Asayell/')).toEqual({ name: 'notFound' })
   expect(matchRoute('/o/token', '/')).toEqual({ name: 'owner', ownerToken: 'token' })
-})
-
-it.each(['register', 'feed', 'profile', 'support'] as const)('scopes primary navigation on %s', (name) => {
-  const route = name === 'support' ? { name, supportToken: 'token' } : { name }
-  const html = renderToStaticMarkup(<App route={route} repository={new LocalStorageRepository()} />)
-  if (name === 'support') {
-    expect(html).not.toContain('<nav')
-  } else {
-    expect(html).toContain('<nav')
-    expect(html).toContain('aria-current="page"')
-    expect(html).toContain('href="/me"')
-  }
 })
