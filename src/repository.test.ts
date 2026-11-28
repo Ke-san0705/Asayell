@@ -68,6 +68,26 @@ describe('LocalStorageRepository', () => {
     expect(await new LocalStorageRepository(storage).listMessages(goal.goal_id)).toEqual([message])
     expect(await repository.listMessages(another.goal_id)).toEqual([])
   })
+
+  it('preserves the first consented response and its timestamp when a phase is retried', async () => {
+    const { repository, storage } = setup()
+    const goal = await repository.createGoal(goalInput)
+    const response = { phase: 'pre' as const, isDemo: true, q1: 1, q2: 2, q3: 3, consent: true }
+
+    await expect(repository.saveSurveyResponse(goal.owner_token, { ...response, consent: false })).rejects.toThrow()
+    expect(await repository.listSurveyResponses()).toEqual([])
+    await repository.saveSurveyResponse(goal.owner_token, response)
+    const first = await repository.listSurveyResponses()
+    expect(first).toEqual([{
+      goal_id: goal.goal_id, phase: 'pre', is_demo: true, q1: 1, q2: 2, q3: 3,
+      continue_intent: null, created_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T.*Z$/),
+    }])
+
+    const reopened = new LocalStorageRepository(storage)
+    await reopened.saveSurveyResponse(goal.owner_token, { ...response, isDemo: false, q1: 5 })
+    expect(await reopened.getSurveyStatus(goal.owner_token)).toEqual(['pre'])
+    expect(await reopened.listSurveyResponses()).toEqual(first)
+  })
 })
 
 

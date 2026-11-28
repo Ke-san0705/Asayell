@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { createSupabaseFixture, fixtureKey, fixtureUrl, rpcPath } from './supabaseFixture'
 
@@ -83,8 +84,7 @@ async function expectNoHorizontalOverflow(page: Page) {
   })).toBe(true)
 }
 
-test('registration shows first-year employee examples without filling the title', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name === 'pages', 'Checks the registration form in this checkout')
+test('registration shows first-year employee examples without filling the title', async ({ page }) => {
   await page.goto('/Asayell/')
 
   const titleInput = page.getByRole('textbox', { name: /夢・目標・楽しみ/ })
@@ -179,20 +179,23 @@ test('T01–T06: register, share, post and receive', async ({ page, context, bro
   await page.goto(ownerUrl)
   const waiting = page.getByText('明日の朝にエールが届きます。', { exact: false })
   await expect(waiting).toBeVisible()
+  await expect(page.getByText('1件のエールが届いています')).toBeVisible()
   await expect(page.getByText(message, { exact: true })).toHaveCount(0)
   expect(ownerMessageRequests).toEqual([])
   await page.getByRole('button', { name: 'デモ：翌朝を体験する' }).click()
   await expect(page.getByText('デモモードで表示しています')).toBeVisible()
   await expect(page.getByText(nickname + 'さん、おはようございます。')).toBeVisible()
-  if (!pages) {
-    await expect(page.getByRole('heading', { name: '受信前アンケート' })).toBeVisible()
-    await expect(page.getByRole('blockquote')).toHaveCount(0)
-    await expectNoHorizontalOverflow(page)
-  }
+  await expect(page.getByRole('heading', { name: '受信前アンケート' })).toBeVisible()
+  await expect(page.getByRole('blockquote')).toHaveCount(0)
+  await expectNoHorizontalOverflow(page)
   await skipPreSurvey(page)
   await expect(page.getByText('1件', { exact: true })).toBeVisible()
   await expect(page.getByRole('blockquote')).toHaveText(message)
   await expectNoHorizontalOverflow(page)
+  await page.getByRole('button', { name: '次へ' }).click()
+  await expect(page.getByRole('heading', { name: '受信後アンケート' })).toBeVisible()
+  await page.getByRole('button', { name: '回答せずに終了する' }).click()
+  await expect(page.getByRole('heading', { name: '受信後アンケート' })).toHaveCount(0)
 
   await page.getByRole('button', { name: 'デモを終了する' }).click()
   await expect(waiting).toBeVisible()
@@ -227,6 +230,93 @@ test('T01–T06: register, share, post and receive', async ({ page, context, bro
   await expect(page.getByText('0件', { exact: true })).toBeVisible()
   await expect(page.getByRole('blockquote')).toHaveCount(0)
 })
+
+for (const isDemo of [false, true]) {
+  test(`R6-05: save and export one response per phase (demo=${isDemo})`, async ({ page, context }, testInfo) => {
+    const pages = testInfo.project.name === 'pages'
+    test.skip(pages && !isDemo, 'The production clock cannot be advanced by Playwright')
+    const fixture = testInfo.project.name === 'supabase' ? createSupabaseFixture() : undefined
+    await fixture?.install(context)
+
+    const owner = await registerGoal(page, pages, false, undefined, '先輩に質問できるようになる')
+    const goalId = new URL(page.url()).pathname.split('/').at(-1)
+    const ownerUrl = new URL((await owner.getAttribute('href'))!, page.url())
+    const supportUrl = new URL(await page.getByText(/^https?:\/\/[^/]+\/Asayell\/s\//).innerText())
+
+    const cheer = '統合テスト用の架空のエール'
+    await page.goto(supportUrl.href)
+    await page.getByLabel('メッセージ本文').fill(cheer)
+    await page.getByRole('button', { name: 'エールを投稿する' }).click()
+    await expect(page.getByRole('status')).toContainText('翌朝に届きます')
+
+    await page.goto(ownerUrl.href)
+    await expect(page.getByText('1件のエールが届いています')).toBeVisible()
+    await expect(page.getByText(cheer)).toHaveCount(0)
+    const openDemo = () => page.getByRole('button', { name: 'デモ：翌朝を体験する' }).click()
+    if (isDemo) {
+      await openDemo()
+    } else {
+      fixture?.unlock()
+      await page.clock.setFixedTime(new Date('2026-11-29T07:00:00+09:00'))
+      await page.reload()
+    }
+
+    const form = page.locator('form')
+    const save = form.getByRole('button', { name: '回答を保存する' })
+    const consent = form.getByRole('checkbox', { name: '検証への参加と回答の保存に同意する' })
+    const answer = async (scores: number[]) => {
+      const questions = form.getByRole('group')
+      await expect(questions).toHaveCount(scores.length)
+      for (const [index, score] of scores.entries()) {
+        await questions.nth(index).getByRole('radio', { name: String(score), exact: true }).check()
+      }
+      await expect(save).toBeDisabled()
+      await consent.check()
+      await expect(save).toBeEnabled()
+      await save.click()
+    }
+
+    await expect(form.getByRole('heading', { name: '受信前アンケート' })).toBeVisible()
+    await expect(page.getByRole('blockquote')).toHaveCount(0)
+    await answer([1, 2, 3])
+    await expect(page.getByRole('blockquote')).toHaveText(cheer)
+    const next = page.getByRole('button', { name: '次へ' })
+    await next.click()
+    await expect(form.getByRole('heading', { name: '受信後アンケート' })).toBeVisible()
+    await expect(form.getByRole('group', { name: 'これからもアサエールを使いたい。' })).toBeVisible()
+    await answer([3, 4, 5, 4])
+    await expect(form).toHaveCount(0)
+
+    await page.reload()
+    if (isDemo) await openDemo()
+    await expect(page.getByRole('blockquote')).toHaveText(cheer)
+    await expect(form.getByRole('heading', { name: '受信前アンケート' })).toHaveCount(0)
+    await next.click()
+    await expect(page.getByText(/すべてのエールを読み終えました/)).toBeVisible()
+    await expect(form.getByRole('heading', { name: '受信後アンケート' })).toHaveCount(0)
+
+    await page.goto('/Asayell/export')
+    const download = page.waitForEvent('download')
+    await page.getByRole('button', { name: 'CSVをダウンロード' }).click()
+    const file = await download
+    expect(file.suggestedFilename()).toBe('asayell-survey-responses.csv')
+    const csv = await readFile(await file.path(), 'utf8')
+    const [header, ...lines] = csv.trimEnd().split(/\r?\n/)
+    expect(header).toBe('goal_id,phase,is_demo,q1,q2,q3,continue_intent,created_at')
+    const rows = lines.map(line => line.split(','))
+    expect(rows.every(row => row.length === 8)).toBe(true)
+    if (!pages) expect(rows).toHaveLength(2)
+    const goalRows = rows.filter(row => row[0] === goalId)
+    expect(goalRows).toHaveLength(2)
+    expect(goalRows.map(row => row.slice(1, 7)).sort()).toEqual([
+      ['post', String(isDemo), '3', '4', '5', '4'],
+      ['pre', String(isDemo), '1', '2', '3', ''],
+    ])
+    for (const privateValue of [nickname, cheer, ownerUrl.pathname.split('/').at(-1)!, supportUrl.pathname.split('/').at(-1)!]) {
+      expect(csv).not.toContain(privateValue)
+    }
+  })
+}
 
 test('T05: an empty inbox shows the fixed message', async ({ page, context }, testInfo) => {
   if (testInfo.project.name === 'supabase') await createSupabaseFixture().install(context)

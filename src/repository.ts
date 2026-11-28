@@ -355,7 +355,7 @@ export class LocalStorageRepository implements AsayellRepository {
     if (!goal) throw new Error('目標が見つかりません。')
     const key = surveyKey(goal.goal_id, response.phase)
     if (this.store.getItem(key) === null) {
-      this.store.setItem(key, JSON.stringify(response))
+      this.store.setItem(key, JSON.stringify({ ...response, createdAt: new Date().toISOString() }))
     }
   }
 
