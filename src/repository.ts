@@ -2,6 +2,7 @@ export interface GoalInput {
   nickname: string
   title: string
   detail?: string
+  isPublic?: boolean
   /** Next wake-up in Asia/Tokyo, supplied as an ISO 8601 timestamp with an offset or Z. */
   wake_at: string
 }
@@ -13,6 +14,10 @@ export interface Goal extends GoalInput {
 }
 
 export type SupportGoal = Pick<Goal, 'nickname' | 'title' | 'detail'>
+export type PublicGoal = Pick<Goal, 'nickname' | 'title' | 'detail' | 'wake_at' | 'support_token'> & {
+  message_count: number
+}
+
 export type OwnerGoal = GoalInput & { is_unlocked?: boolean }
 
 export interface MessageInput {
@@ -24,17 +29,20 @@ export interface MessageInput {
 export interface Message extends MessageInput {
   message_id: string
   created_at: string
-  status: 'visible'
+  status: 'visible' | 'hidden'
 }
 
 export type SupportMessageInput = Pick<MessageInput, 'sender' | 'body'>
-export type InboxMessage = Pick<Message, 'sender' | 'body' | 'created_at'>
+export type InboxMessage = Pick<Message, 'sender' | 'body' | 'created_at'> & { message_id?: string }
 
 export interface AsayellRepository {
   createGoal(input: GoalInput): Promise<Goal>
   getGoalById(goalId: string): Promise<Goal | null>
   getGoalBySupportToken(token: string): Promise<SupportGoal | null>
   getGoalByOwnerToken(token: string): Promise<OwnerGoal | null>
+  listPublicGoals(limit?: number): Promise<PublicGoal[]>
+  setPublic(ownerToken: string, isPublic: boolean): Promise<void>
+  hideMessage(ownerToken: string, messageId: string): Promise<void>
   postMessage(supportToken: string, input: SupportMessageInput): Promise<void>
   listOwnerMessages(ownerToken: string, demo?: boolean): Promise<InboxMessage[]>
 }
@@ -103,7 +111,7 @@ export class LocalStorageRepository implements AsayellRepository {
     validateGoal(input)
 
     const goal: Goal = {
-      nickname, title, detail, wake_at,
+      nickname, title, detail, wake_at, isPublic: input.isPublic ?? false,
       goal_id: crypto.randomUUID(),
       ...createGoalTokens(),
     }
@@ -127,9 +135,44 @@ export class LocalStorageRepository implements AsayellRepository {
 
   async getGoalByOwnerToken(token: string): Promise<Goal | null> {
     for (const goal of this.records<Goal>(goalPrefix)) {
-      if (goal.owner_token === token) return goal
+      if (goal.owner_token === token) return { ...goal, isPublic: goal.isPublic ?? false }
     }
     return null
+  }
+
+  async listPublicGoals(limit = 20): Promise<PublicGoal[]> {
+    const now = Date.now()
+    const goals = [...this.records<Goal>(goalPrefix)]
+      .filter((goal) => goal.isPublic === true && Date.parse(goal.wake_at) > now)
+
+    // Sample without replacement, matching the RPC's random ordering.
+    const count = Math.min(goals.length, Math.min(Math.max(Math.trunc(limit), 1), 50))
+    for (let index = 0; index < count; index += 1) {
+      const other = index + Math.floor(Math.random() * (goals.length - index))
+      const goal = goals[index]
+      goals[index] = goals[other]
+      goals[other] = goal
+    }
+    return Promise.all(goals.slice(0, count).map(async (goal) => {
+      const { nickname, title, detail, wake_at, support_token } = goal
+      const messages = await this.listMessages(goal.goal_id)
+      return { nickname, title, detail, wake_at, support_token, message_count: messages.length }
+    }))
+  }
+
+  async setPublic(ownerToken: string, isPublic: boolean): Promise<void> {
+    const goal = await this.getGoalByOwnerToken(ownerToken)
+    if (!goal) throw new Error('目標が見つかりません。')
+    this.store.setItem(goalPrefix + goal.goal_id, JSON.stringify({ ...goal, isPublic }))
+  }
+
+  async hideMessage(ownerToken: string, messageId: string): Promise<void> {
+    const goal = await this.getGoalByOwnerToken(ownerToken)
+    if (!goal) throw new Error('目標が見つかりません。')
+    const key = messagePrefix(goal.goal_id) + messageId
+    const message = this.read<Message>(key)
+    if (!message) throw new Error('エールが見つかりません。')
+    this.store.setItem(key, JSON.stringify({ ...message, status: 'hidden' }))
   }
 
   async postMessage(supportToken: string, input: SupportMessageInput): Promise<void> {
@@ -163,6 +206,7 @@ export class LocalStorageRepository implements AsayellRepository {
 
   async listMessages(goalId: string): Promise<Message[]> {
     return [...this.records<Message>(messagePrefix(goalId))]
+      .filter((message) => message.status === 'visible')
       .sort((first, second) => first.created_at.localeCompare(second.created_at))
   }
 }

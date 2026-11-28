@@ -5,6 +5,7 @@ import { routePath } from './routes'
 
 export function GoalRegistration({ repository }: { repository: AsayellRepository }) {
   const [fields, setFields] = useState({ nickname: '', title: '', detail: '', time: '' })
+  const [isPublic, setIsPublic] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const submitting = useRef(false)
@@ -27,6 +28,7 @@ export function GoalRegistration({ repository }: { repository: AsayellRepository
         title: fields.title.trim(),
         detail: fields.detail.trim() || undefined,
         wake_at: nextWakeAt(fields.time),
+        isPublic,
       })
       window.location.assign(routePath('share', goal.goal_id))
     } catch {
@@ -60,6 +62,16 @@ export function GoalRegistration({ repository }: { repository: AsayellRepository
           <input name="wakeTime" type="time" required
             value={fields.time} onChange={(event) => update('time', event.target.value)} />
         </label>
+        <label className="visibility-option">
+          <input name="isPublic" type="checkbox" checked={isPublic} disabled={saving}
+            aria-describedby="public-goal-description"
+            onChange={(event) => setIsPublic(event.target.checked)} />
+          みんなに公開する
+        </label>
+        <p className="visibility-description" id="public-goal-description">
+          起床予定時刻まで、ニックネーム・目標タイトル・詳細・起床予定が公開されます。
+          エールの本文と本人専用リンクは公開されません。
+        </p>
         {error && <p className="feedback" role="alert">{error}</p>}
         <button className="action" type="submit" disabled={!valid || saving}>
           {saving ? '登録中…' : '目標を登録する'}

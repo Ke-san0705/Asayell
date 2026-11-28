@@ -13,8 +13,9 @@ type GoalRow = {
   wake_at: string
   support_token: string | null
   owner_token: string | null
+  is_public: boolean
 }
-type MessageRow = { body: string | null; sender: string | null; created_at: string }
+type MessageRow = { id: string; body: string | null; sender: string | null; created_at: string }
 
 export function createSupabaseFixture() {
   let goal: GoalRow | undefined
@@ -33,7 +34,7 @@ export function createSupabaseFixture() {
           apikey: fixtureKey,
           authorization: 'Bearer ' + fixtureKey,
         })
-        const args = request.postDataJSON() as RpcArgs & { p_demo?: boolean }
+        const args = request.postDataJSON() as RpcArgs & { p_demo?: boolean; p_is_public?: boolean }
         const path = new URL(request.url()).pathname
         const supportGoal = goal && goal.support_token === args.p_support_token ? goal : undefined
         const ownerGoal = goal && goal.owner_token === args.p_owner_token ? goal : undefined
@@ -51,6 +52,7 @@ export function createSupabaseFixture() {
               wake_at: args.p_wake_at!,
               support_token: args.p_support_token,
               owner_token: args.p_owner_token,
+              is_public: args.p_is_public ?? false,
             }
             await route.fulfill({ json: goal })
             break
@@ -59,19 +61,34 @@ export function createSupabaseFixture() {
             break
           case rpcPath + 'asayell_post_message':
             if (supportGoal) {
-              messages.push({ body: args.p_body, sender: args.p_sender, created_at: new Date().toISOString() })
+              messages.push({
+                id: crypto.randomUUID(), body: args.p_body, sender: args.p_sender, created_at: new Date().toISOString(),
+              })
             }
             await route.fulfill({ json: Boolean(supportGoal) })
             break
           case rpcPath + 'asayell_get_owner_goal':
             await route.fulfill({
-              json: ownerGoal ? [{ ...publicFields(ownerGoal), is_unlocked: unlocked, message_count: messages.length }] : [],
+              json: ownerGoal ? [{
+                ...publicFields(ownerGoal), is_unlocked: unlocked, message_count: messages.length, is_public: ownerGoal.is_public,
+              }] : [],
             })
             break
           case rpcPath + 'asayell_get_owner_messages':
             expect(typeof args.p_demo).toBe('boolean')
             await route.fulfill({ json: ownerGoal && (unlocked || args.p_demo) ? messages : [] })
             break
+          case rpcPath + 'asayell_set_public':
+            if (ownerGoal) ownerGoal.is_public = args.p_is_public ?? false
+            await route.fulfill({ json: Boolean(ownerGoal) })
+            break
+          case rpcPath + 'asayell_hide_message': {
+            const index = messages.findIndex(({ id }) => id === args.p_message_id)
+            const hidden = Boolean(ownerGoal) && index !== -1
+            if (hidden) messages.splice(index, 1)
+            await route.fulfill({ json: hidden })
+            break
+          }
           default:
             throw new Error('Unexpected request to Supabase: ' + path)
         }

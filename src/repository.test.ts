@@ -68,3 +68,27 @@ describe('LocalStorageRepository', () => {
     expect(await repository.listMessages(another.goal_id)).toEqual([])
   })
 })
+
+
+it('publishes only upcoming opted-in goals and excludes hidden messages from counts', async () => {
+  const { storage, repository } = setup()
+  const wake_at = new Date(Date.now() + 60_000).toISOString()
+  const goal = await repository.createGoal({ ...goalInput, wake_at })
+  await repository.createGoal({ ...goalInput, wake_at: '2020-01-01T00:00:00Z', isPublic: true })
+  const message = await repository.createMessage({ goal_id: goal.goal_id, body: 'エール' })
+  expect(goal.isPublic).toBe(false)
+  expect(await repository.listPublicGoals()).toEqual([])
+  await expect(repository.setPublic(goal.support_token, true)).rejects.toThrow()
+  await repository.setPublic(goal.owner_token, true)
+  const reopened = new LocalStorageRepository(storage)
+  expect((await reopened.getGoalByOwnerToken(goal.owner_token))?.isPublic).toBe(true)
+  expect(await reopened.listPublicGoals()).toEqual([{
+    ...goalInput, wake_at, support_token: goal.support_token, message_count: 1,
+  }])
+  await expect(reopened.hideMessage(goal.support_token, message.message_id)).rejects.toThrow()
+  await reopened.hideMessage(goal.owner_token, message.message_id)
+  expect(await repository.listOwnerMessages(goal.owner_token, true)).toEqual([])
+  expect((await repository.listPublicGoals())[0].message_count).toBe(0)
+  await reopened.setPublic(goal.owner_token, false)
+  expect(await repository.listPublicGoals()).toEqual([])
+})

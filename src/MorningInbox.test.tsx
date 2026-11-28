@@ -79,7 +79,7 @@ it('shows the fixed encouragement and no message controls when the inbox is empt
   await open('/Asayell/o/' + goal.owner_token)
   expect(container.textContent).toContain('0件')
   expect(container.textContent).toContain('今日も自分のペースで')
-  expect(container.querySelector('blockquote, button')).toBeNull()
+  expect(container.querySelector('blockquote, .inbox-action')).toBeNull()
 })
 
 it('keeps messages off the support route and rejects support or unknown owner tokens', async () => {
@@ -172,4 +172,51 @@ it('discards a pending demo response after the owner exits', async () => {
 
   expect(container.textContent).not.toContain('遅れて届く本文')
   expect(container.textContent).toContain('明日の朝にエールが届きます')
+})
+
+
+it('saves the owner visibility toggle and hides the current message', async () => {
+  const goal = await createGoal()
+  const path = '/Asayell/o/' + goal.owner_token
+  await repository.createMessage({ goal_id: goal.goal_id, body: '隠すエール' })
+  await repository.createMessage({ goal_id: goal.goal_id, body: '残すエール' })
+  await open(path)
+
+  const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]')
+  expect(checkbox?.checked).toBe(false)
+  await act(async () => checkbox!.click())
+  expect(checkbox?.checked).toBe(true)
+  expect((await repository.getGoalByOwnerToken(goal.owner_token))?.isPublic).toBe(true)
+  await act(async () => checkbox!.click())
+  expect(checkbox?.checked).toBe(false)
+
+  await press('隠す')
+  expect(container.querySelector('blockquote')?.textContent).toBe('残すエール')
+  expect(container.textContent).toContain('1件')
+  expect(await repository.listOwnerMessages(goal.owner_token)).toMatchObject([{ body: '残すエール' }])
+})
+
+
+it('keeps a demo hide in effect when the inbox loads at wake-up during the request', async () => {
+  vi.setSystemTime(Date.parse(wakeAt) - 60_000)
+  const goal = await createGoal()
+  const message = await repository.createMessage({ goal_id: goal.goal_id, body: '非表示にするエール' })
+
+  const hideMessage = repository.hideMessage.bind(repository)
+  let finishHide!: () => void
+  const pending = new Promise<void>((resolve) => { finishHide = resolve })
+  vi.spyOn(repository, 'hideMessage').mockImplementationOnce(async (...args) => {
+    await pending
+    await hideMessage(...args)
+  })
+  await open('/Asayell/o/' + goal.owner_token)
+  await press('デモ：翌朝を体験する')
+  await press('隠す')
+  await act(async () => vi.advanceTimersByTimeAsync(60_000))
+  const exit = [...container.querySelectorAll('button')].find((button) => button.textContent === 'デモを終了する')
+  expect(exit?.disabled).toBe(true)
+  await act(async () => finishHide())
+  await press('デモを終了する')
+  expect(container.textContent).toContain('0件')
+  expect(container.textContent).not.toContain(message.body)
 })

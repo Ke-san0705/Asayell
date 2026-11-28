@@ -1,14 +1,15 @@
 import {
   createGoalTokens, validateGoal, validateMessageBody,
   type AsayellRepository, type Goal, type GoalInput, type InboxMessage,
-  type OwnerGoal, type SupportGoal, type SupportMessageInput,
+  type OwnerGoal, type PublicGoal, type SupportGoal, type SupportMessageInput,
 } from './repository'
 
 type ShareStorage = Pick<Storage, 'getItem' | 'setItem'>
-type GoalRow = Omit<GoalInput, 'detail'> & { detail: string | null }
+type GoalRow = Omit<GoalInput, 'detail' | 'isPublic'> & { detail: string | null; is_public?: boolean }
 type CreatedGoalRow = GoalRow & { id: string; support_token: string; owner_token: string }
 type OwnerGoalRow = GoalRow & { is_unlocked: boolean }
-type MessageRow = Omit<InboxMessage, 'sender'> & { sender: string | null }
+type MessageRow = Omit<InboxMessage, 'sender' | 'message_id'> & { id?: string; sender: string | null }
+type PublicGoalRow = Omit<PublicGoal, 'detail'> & { detail: string | null }
 
 export class SupabaseRepository implements AsayellRepository {
   private readonly rpcUrl: string
@@ -22,7 +23,7 @@ export class SupabaseRepository implements AsayellRepository {
     this.rpcUrl = url.replace(/\/+$/, '') + '/rest/v1/rpc/'
   }
 
-  private async rpc<T>(name: string, args: Record<string, string | boolean | null>): Promise<T> {
+  private async rpc<T>(name: string, args: Record<string, string | number | boolean | null>): Promise<T> {
     const response = await this.request(this.rpcUrl + name, {
       method: 'POST',
       headers: {
@@ -51,12 +52,14 @@ export class SupabaseRepository implements AsayellRepository {
       p_wake_at: input.wake_at,
       p_support_token: support_token,
       p_owner_token: owner_token,
+      // Both RPC versions support private registration with these original arguments.
+      ...(input.isPublic ? { p_is_public: true } : {}),
     })
     const row = Array.isArray(result) ? result[0] : result
     if (!row?.id) throw new Error('登録した目標を取得できませんでした。')
     const goal: Goal = {
       goal_id: row.id, nickname: row.nickname, title: row.title, detail: row.detail ?? undefined,
-      wake_at: row.wake_at, support_token: row.support_token, owner_token: row.owner_token,
+      wake_at: row.wake_at, isPublic: row.is_public ?? false, support_token: row.support_token, owner_token: row.owner_token,
     }
     // The share route is opened by ID in the registering browser after navigation.
     storage.setItem(this.shareKey(goal.goal_id), JSON.stringify(goal))
@@ -79,8 +82,31 @@ export class SupabaseRepository implements AsayellRepository {
     if (!row) return null
     return {
       nickname: row.nickname, title: row.title, detail: row.detail ?? undefined,
-      wake_at: row.wake_at, is_unlocked: row.is_unlocked,
+      wake_at: row.wake_at, is_unlocked: row.is_unlocked, isPublic: row.is_public,
     }
+  }
+
+  async listPublicGoals(limit = 20): Promise<PublicGoal[]> {
+    const rows = await this.rpc<PublicGoalRow[]>('asayell_list_public_goals', { p_limit: limit })
+    return rows.map(({ nickname, title, detail, wake_at, support_token, message_count }) => ({
+      nickname, title, detail: detail ?? undefined, wake_at, support_token, message_count,
+    }))
+  }
+
+  async setPublic(ownerToken: string, isPublic: boolean): Promise<void> {
+    const updated = await this.rpc<boolean>('asayell_set_public', {
+      p_owner_token: ownerToken,
+      p_is_public: isPublic,
+    })
+    if (updated !== true) throw new Error('公開設定を変更できませんでした。')
+  }
+
+  async hideMessage(ownerToken: string, messageId: string): Promise<void> {
+    const updated = await this.rpc<boolean>('asayell_hide_message', {
+      p_owner_token: ownerToken,
+      p_message_id: messageId,
+    })
+    if (updated !== true) throw new Error('エールを隠せませんでした。')
   }
 
   async postMessage(supportToken: string, input: SupportMessageInput): Promise<void> {
@@ -98,6 +124,8 @@ export class SupabaseRepository implements AsayellRepository {
       p_owner_token: ownerToken,
       p_demo: demo,
     })
-    return rows.map(({ sender, body, created_at }) => ({ sender: sender ?? undefined, body, created_at }))
+    return rows.map(({ id, sender, body, created_at }) => ({
+      message_id: id, sender: sender ?? undefined, body, created_at,
+    }))
   }
 }
