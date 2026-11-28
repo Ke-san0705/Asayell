@@ -33,7 +33,7 @@ function ProfileCard({ goal, repository }: { goal: ProfileGoal; repository: Asay
       await navigator.clipboard.writeText(supportUrl)
       setCopyStatus('応援募集URLをコピーしました。')
     } catch {
-      setCopyStatus('表示されているURLを選んでコピーしてください。')
+      setCopyStatus('応援募集URLをコピーできませんでした。もう一度お試しください。')
     }
   }
 
@@ -52,7 +52,6 @@ function ProfileCard({ goal, repository }: { goal: ProfileGoal; repository: Asay
         みんなの夢に公開
       </label>
       {error && <p role="alert">{error}</p>}
-      <p className="share-url"><a href={supportUrl}>{supportUrl}</a></p>
       <button className="action secondary" type="button" onClick={copySupportUrl}>応援募集URLをコピー</button>
       {copyStatus && <p role="status">{copyStatus}</p>}
       <button className="action" type="button" onClick={() => window.location.assign(routePath('o', goal.ownerToken))}>

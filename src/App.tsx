@@ -33,7 +33,8 @@ export function App({ route, repository }: AppProps) {
     </>
   )
 
-  const hasNavigation = route.name === 'register' || route.name === 'profile'
+  const navigationTab = route.name === 'share' ? 'register' : route.name
+  const hasNavigation = navigationTab === 'register' || navigationTab === 'profile'
 
   return (
     <RepositoryContext value={repository}>
@@ -64,7 +65,7 @@ export function App({ route, repository }: AppProps) {
           )}
         </main>
       </div>
-      {hasNavigation && <BottomNavigation current={route.name} />}
+      {hasNavigation && <BottomNavigation current={navigationTab} />}
     </RepositoryContext>
   )
 }
