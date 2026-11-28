@@ -1,3 +1,4 @@
+import { Link } from 'react-router'
 import { useEffect, useState } from 'react'
 import { goalCategoryLabels, type AsayellRepository, type PublicGoal } from './repository'
 import { routePath } from './routes'
@@ -74,7 +75,7 @@ export function PublicFeed({ repository }: { repository: AsayellRepository }) {
   return (
     <main className="public-feed">
       <header className="feed-header">
-        <a className="brand" href={import.meta.env.BASE_URL}>アサエール</a>
+        <Link className="brand" to={import.meta.env.BASE_URL}>アサエール</Link>
         <h1>みんなの夢</h1>
       </header>
       {feed.kind === 'loading' && <p className="feed-status" role="status">公開中の夢を読み込んでいます。</p>}
@@ -84,7 +85,7 @@ export function PublicFeed({ repository }: { repository: AsayellRepository }) {
       {feed.kind === 'ready' && (feed.goals.length === 0 ? (
         <div className="feed-status">
           <p role="status">公開中の夢はまだありません。</p>
-          <a className="action" href={import.meta.env.BASE_URL}>自分の夢を登録する</a>
+          <Link className="action" to={import.meta.env.BASE_URL}>自分の夢を登録する</Link>
         </div>
       ) : (
         <section className="feed-list" aria-label="公開中の夢">
@@ -100,7 +101,7 @@ export function PublicFeed({ repository }: { repository: AsayellRepository }) {
                 <time dateTime={wake_at}>{wakeLabel(wake_at, feed.now)}</time>
                 <span>届いた応援 {message_count}件</span>
               </div>
-              <a className="action" href={routePath('s', support_token)}>応援する</a>
+              <Link className="action" to={routePath('s', support_token)}>応援する</Link>
             </article>
           ))}
         </section>

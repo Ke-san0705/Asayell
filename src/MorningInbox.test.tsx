@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react'
+import { MemoryRouter } from 'react-router'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { App } from './App'
@@ -35,7 +36,7 @@ function createGoal() {
 
 async function open(path: string) {
   await act(async () => {
-    root.render(<App route={matchRoute(path, '/Asayell/')} repository={repository} />)
+    root.render(<MemoryRouter><App route={matchRoute(path, '/Asayell/')} repository={repository} /></MemoryRouter>)
   })
 }
 

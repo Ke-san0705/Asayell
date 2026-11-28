@@ -1,9 +1,11 @@
+import { Link, useNavigate } from 'react-router'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { goalLimits, isValidRegistration, nextWakeAt } from './registrationFields'
 import { defaultGoalCategory, goalCategoryLabels, type AsayellRepository, type GoalCategory } from './repository'
 import { routePath } from './routes'
 
 export function GoalRegistration({ repository }: { repository: AsayellRepository }) {
+  const navigate = useNavigate()
   const [fields, setFields] = useState({ title: '', time: '' })
   const [category, setCategory] = useState<GoalCategory>(defaultGoalCategory)
   const [isPublic, setIsPublic] = useState(false)
@@ -58,7 +60,7 @@ export function GoalRegistration({ repository }: { repository: AsayellRepository
         category,
         isPublic,
       })
-      window.location.assign(routePath('share', goal.goal_id))
+      void navigate(routePath('share', goal.goal_id))
     } catch {
       submitting.current = false
       setSaving(false)
@@ -72,7 +74,7 @@ export function GoalRegistration({ repository }: { repository: AsayellRepository
       <form className="goal-form" onSubmit={submit} aria-busy={saving}>
         {profileError && <p role="alert">アカウント名を読み込めませんでした。もう一度ページを開いてください。</p>}
         {!profileError && accountName === undefined && <p role="status">アカウント名を読み込んでいます。</p>}
-        {accountName === null && <p><a href={import.meta.env.BASE_URL + 'me'}>プロフィール</a>でアカウント名を設定してください。</p>}
+        {accountName === null && <p><Link to={import.meta.env.BASE_URL + 'me'}>プロフィール</Link>でアカウント名を設定してください。</p>}
         {accountName && <p className="account-name">アカウント名 {accountName}</p>}
         <fieldset className="category-field" disabled={saving}>
           <legend>種類</legend>

@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server'
+import { createMemoryRouter, RouterProvider } from 'react-router'
 import { expect, it } from 'vitest'
 import { App } from './App'
 import { LocalStorageRepository } from './repository'
@@ -14,7 +15,8 @@ it.each([
 ] as const)('matches and renders %s', (path, route, heading) => {
   expect(matchRoute(path, '/Asayell/')).toEqual(route)
   const repository = new LocalStorageRepository()
-  const html = renderToStaticMarkup(<App route={route} repository={repository} />)
+  const router = createMemoryRouter([{ path: '*', element: <App route={route} repository={repository} /> }])
+  const html = renderToStaticMarkup(<RouterProvider router={router} />)
   expect(html).toContain(`<h1>${heading}</h1>`)
   const navigation = html.match(/<nav[^>]*>.*?<\/nav>/)?.[0]
   expect(navigation).toBeDefined()

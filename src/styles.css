@@ -556,3 +556,26 @@ h1 {
 .profile-goal p[role="status"] + .action {
   margin-top: 0.75rem;
 }
+
+.account-name-dialog {
+  width: min(calc(100% - 2rem), 24rem);
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface);
+  color: inherit;
+}
+
+.account-name-dialog::backdrop {
+  background: rgb(65 47 43 / 45%);
+}
+
+.account-name-dialog h2 {
+  margin: 0 0 1rem;
+  font-size: 1.125rem;
+}
+
+.account-name-dialog-actions {
+  display: grid;
+  gap: 0.5rem;
+}

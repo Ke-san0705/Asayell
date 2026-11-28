@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useBlocker, useNavigate } from 'react-router'
 import { accountNameLimit, goalCategoryLabels, normalizeAccountName, type AsayellRepository, type ProfileGoal } from './repository'
 import { routePath } from './routes'
 
@@ -9,6 +10,7 @@ const wakeDate = new Intl.DateTimeFormat('ja-JP', {
 type ProfileState = { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; goals: ProfileGoal[] }
 
 function ProfileCard({ goal, repository }: { goal: ProfileGoal; repository: AsayellRepository }) {
+  const navigate = useNavigate()
   const [isPublic, setIsPublic] = useState(goal.isPublic)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -55,7 +57,7 @@ function ProfileCard({ goal, repository }: { goal: ProfileGoal; repository: Asay
       {error && <p role="alert">{error}</p>}
       <button className="action secondary" type="button" onClick={copySupportUrl}>応援募集URLをコピー</button>
       {copyStatus && <p role="status">{copyStatus}</p>}
-      <button className="action" type="button" onClick={() => window.location.assign(routePath('o', goal.ownerToken))}>
+      <button className="action" type="button" onClick={() => void navigate(routePath('o', goal.ownerToken))}>
         受信画面を開く
       </button>
     </article>
@@ -64,55 +66,116 @@ function ProfileCard({ goal, repository }: { goal: ProfileGoal; repository: Asay
 
 function AccountNameForm({ repository }: { repository: AsayellRepository }) {
   const [name, setName] = useState('')
-  const [loaded, setLoaded] = useState(false)
+  const [savedName, setSavedName] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  const loaded = savedName !== null
+  const dirty = loaded && name !== savedName
+  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+    dirty && (currentLocation.pathname !== nextLocation.pathname ||
+      currentLocation.search !== nextLocation.search ||
+      currentLocation.hash !== nextLocation.hash),
+  )
+  const blocked = blocker.state === 'blocked'
+
+  useEffect(() => {
+    if (!blocked) return
+    const dialog = dialogRef.current!
+    dialog.showModal()
+    cancelRef.current?.focus()
+    return () => dialog.close()
+  }, [blocked])
 
   useEffect(() => {
     let active = true
     void repository.getProfile().then((profile) => {
       if (!active) return
-      setName(profile?.accountName ?? '')
-      setLoaded(true)
+      const accountName = profile?.accountName ?? ''
+      setName(accountName)
+      setSavedName(accountName)
     }).catch(() => {
       if (active) setError('アカウント名を読み込めませんでした。もう一度ページを開いてください。')
     })
     return () => { active = false }
   }, [repository])
 
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!loaded || saving) return
+  async function saveName() {
+    if (!loaded || saving) return false
     setError('')
     setStatus('')
     setSaving(true)
     try {
       const profile = await repository.setProfile(normalizeAccountName(name))
       setName(profile.accountName)
+      setSavedName(profile.accountName)
       setStatus('アカウント名を保存しました。')
+      return true
     } catch (cause) {
       setError(cause instanceof RangeError
         ? cause.message
         : 'アカウント名を保存できませんでした。もう一度お試しください。')
+      return false
     } finally {
       setSaving(false)
     }
   }
 
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    void saveName()
+  }
+
+  async function saveAndProceed() {
+    if (blocker.state === 'blocked' && (!dirty || await saveName())) blocker.proceed()
+  }
+
+  function discardAndProceed() {
+    if (blocker.state !== 'blocked') return
+    setName(savedName ?? '')
+    setError('')
+    blocker.proceed()
+  }
+
   return (
-    <form className="goal-form account-name-form" onSubmit={save} aria-busy={(!loaded && !error) || saving}>
-      <label>
-        アカウント名 <span className="hint">（{accountNameLimit}文字まで）</span>
-        <input name="accountName" value={name} required disabled={!loaded || saving}
-          onChange={(event) => { setName(event.target.value); setStatus(''); setError('') }} />
-      </label>
-      {error && <p className="feedback" role="alert">{error}</p>}
-      {status && <p role="status">{status}</p>}
-      <button className="action" type="submit" disabled={!loaded || saving}>
-        {saving ? '保存中…' : 'アカウント名を保存する'}
-      </button>
-    </form>
+    <>
+      <form className="goal-form account-name-form" onSubmit={submit} aria-busy={(!loaded && !error) || saving}>
+        <label>
+          アカウント名 <span className="hint">（{accountNameLimit}文字まで）</span>
+          <input name="accountName" value={name} required disabled={!loaded || saving}
+            onChange={(event) => { setName(event.target.value); setStatus(''); setError('') }} />
+        </label>
+        {error && !blocked && <p className="feedback" role="alert">{error}</p>}
+        {status && <p role="status">{status}</p>}
+        <button className="action" type="submit" disabled={!loaded || saving}>
+          {saving ? '保存中…' : 'アカウント名を保存する'}
+        </button>
+      </form>
+      {blocked && (
+        <dialog ref={dialogRef} className="account-name-dialog" aria-labelledby="account-name-dialog-title"
+          onCancel={(event) => {
+            event.preventDefault()
+            if (!saving) blocker.reset?.()
+          }}>
+          <h2 id="account-name-dialog-title">アカウント名を保存しますか？</h2>
+          {error && <p className="feedback" role="alert">{error}</p>}
+          <div className="account-name-dialog-actions" aria-busy={saving}>
+            <button className="action" type="button" disabled={saving} onClick={() => void saveAndProceed()}>
+              {saving ? '保存中…' : '保存して移動'}
+            </button>
+            <button className="action secondary" type="button" disabled={saving} onClick={discardAndProceed}>
+              保存せず移動
+            </button>
+            <button ref={cancelRef} className="action secondary" type="button" disabled={saving}
+              onClick={() => blocker.reset?.()}>
+              キャンセル
+            </button>
+          </div>
+        </dialog>
+      )}
+    </>
   )
 }
 
