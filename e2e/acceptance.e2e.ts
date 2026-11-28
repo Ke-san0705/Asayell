@@ -69,6 +69,8 @@ test('T01–T06: register, share, post and receive', async ({ page, context, bro
   await expect(page.getByText('応援募集URLをコピーしました。')).toBeVisible()
   const supportUrl = await page.evaluate(() => navigator.clipboard.readText())
   expect(supportUrl).toMatch(/\/Asayell\/s\/[^/]+$/)
+  await expect(page.getByText(supportUrl, { exact: true })).toBeVisible()
+  await expect(page.getByText(ownerUrl, { exact: true })).toBeVisible()
   expect(new URL(supportUrl).pathname.split('/').at(-1))
     .not.toBe(new URL(ownerUrl).pathname.split('/').at(-1))
 
@@ -257,10 +259,21 @@ test('primary navigation and device profile manage a registered goal', async ({ 
   const owner = await registerGoal(page, false, true)
   const ownerUrl = (await owner.getAttribute('href'))!
   const ownerToken = new URL(ownerUrl).pathname.split('/').at(-1)!
-  await page.goto('/Asayell/')
-
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  const shareUrl = page.url()
   const nav = page.getByRole('navigation', { name: 'メインナビゲーション' })
+  const post = nav.getByRole('link', { name: '投稿' })
+  await expect(post).toHaveAttribute('aria-current', 'page')
+  await post.click()
+  await expect(page).toHaveURL('/Asayell/')
+
+  await page.goto(shareUrl)
+  await nav.getByRole('link', { name: 'プロフィール' }).click()
+  await expect(page).toHaveURL('/Asayell/me')
+
+  await page.goto(shareUrl)
   await nav.getByRole('link', { name: 'みんなの夢' }).click()
+  await expect(page).toHaveURL('/Asayell/feed')
   const support = page.getByRole('link', { name: '応援する' })
   await expect(support).toBeVisible()
   const supportUrl = (await support.getAttribute('href'))!
@@ -285,7 +298,12 @@ test('primary navigation and device profile manage a registered goal', async ({ 
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
   await expect(page.locator('time')).toContainText('7:00')
   await expect(page.getByText('届いた応援 1件')).toBeVisible()
-  await expect(page.getByRole('link', { name: /\/Asayell\/s\// })).toHaveAttribute('href', new URL(supportUrl, page.url()).href)
+  const absoluteSupportUrl = new URL(supportUrl, page.url()).href
+  await expect(page.locator('main')).not.toContainText(absoluteSupportUrl)
+  await expect(page.locator('main')).not.toContainText(ownerUrl)
+  await page.getByRole('button', { name: '応援募集URLをコピー' }).click()
+  await expect(page.getByRole('status')).toHaveText('応援募集URLをコピーしました。')
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(absoluteSupportUrl)
   expect(await page.locator('main').innerHTML()).not.toContain(ownerToken)
   await expect(page.getByText(message, { exact: true })).toHaveCount(0)
   expect(ownerMessages).toEqual([])
@@ -438,7 +456,7 @@ test('R3-04: public registration reaches a separate browser and the owner inbox'
     const profile = page.getByRole('article').filter({ hasText: goalTitle })
     await expect(profile.getByText('届いた応援 1件')).toBeVisible()
     await expect(profile.locator('time')).toBeVisible()
-    await expect(profile.getByRole('link')).toHaveAttribute('href', new URL('/Asayell/s/' + supportToken, baseURL).href)
+    await expect(profile).not.toContainText(new URL('/Asayell/s/' + supportToken, baseURL).href)
     const toggle = profile.getByRole('checkbox', { name: 'みんなの夢に公開' })
     await expect(toggle).toBeChecked()
     await profile.getByRole('button', { name: '受信画面を開く' }).click()
