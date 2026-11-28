@@ -14,3 +14,4 @@ Gemini API 評価の使用トークンを記録する。Codex / Claude の使用
 | 2026-11-28 03:40 | PR #11 評価（Issue #5・A-04デモモード＋文言・デザイン仕上げ、head 496469d5、総合100.0%・mergeable） | gemini-3.5-flash-lite | 6830 | 576 | 7406 |
 | 2026-11-28 03:50 | PR #12 評価（Issue #6・A-05統合・受け入れテスト、head 32d2dd7b、総合100.0%・mergeable） | gemini-3.5-flash-lite | 4561 | 359 | 4920 |
 | 2026-11-28 08:52 | PR #15 評価（Issue #13・R2-01 SupabaseRepository実装、head 6f802b51、総合100.0%・mergeable、思考トークン1864含む） | gemini-3.6-flash | 9980 | 471 | 12315 |
+| 2026-11-28 09:28 | PR #16 評価（Issue #14・R2-02 2端末受け入れテスト、head 8bb97b68、総合100・mergeable、評価2回分） | gemini-3.5-flash-lite | - | - | 11541 |
