@@ -36,3 +36,6 @@ Gemini API 評価の使用トークンを記録する。Codex / Claude の使用
 | 2026-11-28 14:09 | PR #44 評価の再取得（同プロンプトで再実行、head c50a608c、総合100.0%・mergeable、思考トークン616含む） | gemini-3.6-flash | 635 | 122 | 1373 |
 | 2026-11-28 14:47 | PR #47 評価（Issue #45・応援者名の初期値にアカウント名、head c65e6148、総合100.0%・mergeable、思考トークン936含む） | gemini-3.6-flash | 624 | 108 | 1668 |
 | 2026-11-28 14:54 | PR #48 評価（Issue #46・アカウント名の未保存変更時の遷移確認ダイアログ、head 6099e52b、総合100.0%・mergeable、思考トークン663含む） | gemini-3.6-flash | 960 | 107 | 1730 |
+| 2026-11-29 03:41 | PR #54 評価（Issue #51・R6-03 目標登録フォームに新入社員向け入力例、head 43e0d0ed、総合100%・mergeable） ※gemini-3.6-flashが503のためflash-liteで取得 | gemini-3.5-flash-lite | 1247 | 194 | 1441 |
+| 2026-11-29 03:43 | PR #55 評価（Issue #49・R6-01 受信前・受信後アンケートと継続利用意向、head 7e29407a、総合100%・mergeable） ※gemini-3.6-flashが503のためflash-liteで取得 | gemini-3.5-flash-lite | 5452 | 144 | 5596 |
+| 2026-11-29 03:44 | PR #56 評価（Issue #52・R6-04 集計CSV出力ページ /export、head 057e9032、総合100%・mergeable） | gemini-3.5-flash-lite | 1053 | 153 | 1206 |
