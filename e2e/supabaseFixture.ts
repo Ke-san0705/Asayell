@@ -1,4 +1,5 @@
 import { expect, type BrowserContext } from '@playwright/test'
+import type { SurveyResponseRow } from '../src/repository'
 
 export const rpcPath = '/rest/v1/rpc/'
 export const fixtureUrl = 'https://asayell-e2e.test'
@@ -21,6 +22,7 @@ type MessageRow = { id: string; body: string | null; sender: string | null; crea
 export function createSupabaseFixture(now = Date.now) {
   const profiles = new Map<string, { account_name: string }>()
   const goals: Array<GoalRow & { deviceId: string | null; messages: MessageRow[] }> = []
+  const surveys: SurveyResponseRow[] = []
   let unlocked = false
 
   return {
@@ -35,7 +37,11 @@ export function createSupabaseFixture(now = Date.now) {
           apikey: fixtureKey,
           authorization: 'Bearer ' + fixtureKey,
         })
-        const args = request.postDataJSON() as RpcArgs & { p_demo?: boolean; p_is_public?: boolean; p_limit?: number }
+        const args = request.postDataJSON() as RpcArgs & {
+          p_demo?: boolean; p_is_public?: boolean; p_limit?: number
+          p_phase: SurveyResponseRow['phase']; p_is_demo: boolean; p_consent: boolean
+          p_q1: number; p_q2: number; p_q3: number; p_continue_intent: number | null
+        }
         const path = new URL(request.url()).pathname
         const supportGoal = goals.find(goal => goal.support_token === args.p_support_token)
         const ownerGoal = goals.find(goal => goal.owner_token === args.p_owner_token)
@@ -117,7 +123,29 @@ export function createSupabaseFixture(now = Date.now) {
             })
             break
           case rpcPath + 'asayell_get_survey_status':
-            await route.fulfill({ json: [] })
+            await route.fulfill({ json: surveys.filter(row => row.goal_id === ownerGoal?.id)
+              .map(({ phase }) => ({ phase })) })
+            break
+          case rpcPath + 'asayell_save_survey_response': {
+            expect(ownerGoal).toBeDefined()
+            expect(args.p_consent).toBe(true)
+            if (ownerGoal && !surveys.some(row => row.goal_id === ownerGoal.id && row.phase === args.p_phase)) {
+              surveys.push({
+                goal_id: ownerGoal.id,
+                phase: args.p_phase,
+                is_demo: args.p_is_demo,
+                q1: args.p_q1,
+                q2: args.p_q2,
+                q3: args.p_q3,
+                continue_intent: args.p_continue_intent,
+                created_at: new Date(now()).toISOString(),
+              })
+            }
+            await route.fulfill({ json: 'ok' })
+            break
+          }
+          case rpcPath + 'asayell_list_survey_responses':
+            await route.fulfill({ json: surveys })
             break
           case rpcPath + 'asayell_get_message_count':
             await route.fulfill({ json: ownerGoal ? ownerGoal.messages.length : 0 })
