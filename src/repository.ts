@@ -116,12 +116,36 @@ export interface AsayellRepository {
   getGoalByOwnerToken(token: string): Promise<OwnerGoal | null>
   listOwnerGoals(): Promise<ProfileGoal[]>
   listPublicGoals(limit?: number): Promise<PublicGoal[]>
+  listSurveyResponses(): Promise<SurveyResponseRow[]>
   setPublic(ownerToken: string, isPublic: boolean): Promise<void>
   hideMessage(ownerToken: string, messageId: string): Promise<void>
   postMessage(supportToken: string, input: SupportMessageInput): Promise<void>
   listOwnerMessages(ownerToken: string, demo?: boolean): Promise<InboxMessage[]>
   saveSurveyResponse(ownerToken: string, response: SurveyResponse): Promise<void>
   getSurveyStatus(ownerToken: string): Promise<SurveyPhase[]>
+}
+
+export interface SurveyResponseRow {
+  goal_id: string
+  phase: 'pre' | 'post'
+  is_demo: boolean
+  q1: number
+  q2: number
+  q3: number
+  continue_intent: number | null
+  created_at: string
+}
+
+export function toSurveyResponseRow({ goal_id, phase, is_demo, q1, q2, q3, continue_intent, created_at }: SurveyResponseRow): SurveyResponseRow {
+  return { goal_id, phase, is_demo, q1, q2, q3, continue_intent, created_at }
+}
+
+const surveyResponsePrefix = 'asayell:survey:'
+
+type LocalSurveyResponse = Pick<SurveyResponseRow, 'phase' | 'q1' | 'q2' | 'q3'> & {
+  isDemo: boolean
+  continueIntent?: number
+  createdAt?: string
 }
 
 export type RepositoryStorage = Pick<Storage, 'getItem' | 'setItem' | 'key' | 'length'>
@@ -189,12 +213,16 @@ export class LocalStorageRepository implements AsayellRepository {
   }
 
   private *records<T>(prefix: string): IterableIterator<T> {
+    for (const [, record] of this.recordEntries<T>(prefix)) yield record
+  }
+
+  private *recordEntries<T>(prefix: string): IterableIterator<[string, T]> {
     const storage = this.store
     for (let index = 0; index < storage.length; index += 1) {
       const key = storage.key(index)
       if (!key?.startsWith(prefix)) continue
       const record = this.read<T>(key)
-      if (record !== null) yield record
+      if (record !== null) yield [key, record]
     }
   }
 
@@ -347,6 +375,18 @@ export class LocalStorageRepository implements AsayellRepository {
     }
     this.store.setItem(messagePrefix(goal_id) + message.message_id, JSON.stringify(message))
     return message
+  }
+
+  async listSurveyResponses(): Promise<SurveyResponseRow[]> {
+    return [...this.recordEntries<LocalSurveyResponse>(surveyResponsePrefix)]
+      .map(([key, { phase, isDemo, q1, q2, q3, continueIntent, createdAt }]) => ({
+        goal_id: key.slice(surveyResponsePrefix.length, key.lastIndexOf(':')),
+        phase, is_demo: isDemo, q1, q2, q3,
+        continue_intent: phase === 'post' ? continueIntent ?? null : null,
+        // The initial local survey format does not record a submission time.
+        created_at: createdAt ?? '',
+      }))
+      .sort((first, second) => first.created_at.localeCompare(second.created_at))
   }
 
   async listMessages(goalId: string): Promise<Message[]> {
