@@ -10,6 +10,17 @@ function waitForRpc(page: Page, name: string) {
   return page.waitForResponse(response => new URL(response.url()).pathname === rpcPath + name)
 }
 
+async function expectRegistrationCategories(page: Page, category?: '夢' | '楽しみ') {
+  await expect(page.getByRole('radio', { name: '目標', exact: true })).toBeChecked()
+  await expect(page.getByLabel('詳細')).toHaveAttribute(
+    'placeholder', '例）まずは布団から出て水を飲む。小さな一歩でOK',
+  )
+  if (category) {
+    await page.getByText(category, { exact: true }).click()
+    await expect(page.getByRole('radio', { name: category, exact: true })).toBeChecked()
+  }
+}
+
 async function registerGoal(
   page: Page, pages: boolean, isPublic = false, category?: '夢' | '楽しみ',
   goalTitle = title, registeredAt = '2026-11-28T20:00:00+09:00',
@@ -25,16 +36,7 @@ async function registerGoal(
   await expect(register).toBeDisabled()
   await page.getByLabel('ニックネーム').fill(nickname)
   await page.getByLabel('夢・目標・楽しみ').fill(goalTitle)
-  if (!pages) {
-    await expect(page.getByRole('radio', { name: '目標', exact: true })).toBeChecked()
-    await expect(page.getByLabel('詳細')).toHaveAttribute(
-      'placeholder', '例）まずは布団から出て水を飲む。小さな一歩でOK',
-    )
-    if (category) {
-      await page.getByText(category, { exact: true }).click()
-      await expect(page.getByRole('radio', { name: category, exact: true })).toBeChecked()
-    }
-  }
+  await expectRegistrationCategories(page, category)
   await page.getByLabel('詳細').fill(detail)
   await page.getByLabel('起床予定時刻').fill(wakeTime)
   if (!pages) {
@@ -258,17 +260,50 @@ test('public feed links to support and excludes private or expired goals', async
   await expect(support).toHaveCount(0)
 })
 
-test('public feed stacks compact cards newest first', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'local', 'Multiple goals are registered with the local repository.')
-  await registerGoal(page, false, true, '夢', '最初の投稿')
-  await registerGoal(page, false, true, '楽しみ', '新しい投稿', '2026-11-28T20:01:00+09:00')
-  await page.goto('/Asayell/feed')
-  const cards = page.getByRole('region', { name: '公開中の夢' }).getByRole('article')
-  await expect(cards.getByRole('heading')).toHaveText(['新しい投稿', '最初の投稿'])
-  await expect(cards.first().getByText('楽しみ', { exact: true })).toBeVisible()
-  await expect(cards.last().getByText('夢', { exact: true })).toBeVisible()
-  await expect(cards.last().getByRole('heading')).toBeInViewport()
-  await expectNoHorizontalOverflow(page)
+test('R4-04: public feed stacks compact cards newest first', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'supabase', 'The RPC fixture stores a single goal.')
+  const pages = testInfo.project.name === 'pages'
+  const suffix = pages ? ' ' + crypto.randomUUID() : ''
+  const olderTitle = 'R4-04 最初の投稿' + suffix
+  const newerTitle = 'R4-04 新しい投稿' + suffix
+  const ownerUrls: string[] = []
+
+  try {
+    const older = await registerGoal(page, pages, !pages, '夢', olderTitle)
+    if (pages) ownerUrls.push((await older.getAttribute('href'))!)
+    const newer = await registerGoal(page, pages, !pages, '楽しみ', newerTitle, '2026-11-28T20:01:00+09:00')
+    if (pages) ownerUrls.push((await newer.getAttribute('href'))!)
+
+    for (const url of ownerUrls) {
+      await page.goto(url)
+      const visibility = page.getByRole('checkbox', { name: 'みんなに公開する' })
+      await expect(visibility).not.toBeChecked()
+      await visibility.check()
+      await expect(visibility).toBeEnabled()
+      await expect(visibility).toBeChecked()
+    }
+
+    await page.goto('/Asayell/feed')
+    const headings = page.getByRole('heading', { name: olderTitle, exact: true })
+      .or(page.getByRole('heading', { name: newerTitle, exact: true }))
+    const cards = page.getByRole('region', { name: '公開中の夢' }).getByRole('article').filter({ has: headings })
+    await expect(cards.getByRole('heading')).toHaveText([newerTitle, olderTitle])
+    await expect(cards.first().getByText('楽しみ', { exact: true })).toBeVisible()
+    await expect(cards.last().getByText('夢', { exact: true })).toBeVisible()
+    if (!pages) await expect(cards.last().getByRole('heading')).toBeInViewport()
+    await expectNoHorizontalOverflow(page)
+  } finally {
+    for (const url of ownerUrls) {
+      await page.goto(url)
+      const visibility = page.getByRole('checkbox', { name: 'みんなに公開する' })
+      await expect(visibility).toBeVisible()
+      if (await visibility.isChecked()) {
+        await visibility.click()
+        await expect(visibility).toBeEnabled()
+        await expect(visibility).not.toBeChecked()
+      }
+    }
+  }
 })
 
 test('primary navigation and device profile manage a registered goal', async ({ page, context, browser }, testInfo) => {
@@ -365,7 +400,7 @@ test('primary navigation and device profile manage a registered goal', async ({ 
   }
 })
 
-test('R3-04: public registration reaches a separate browser and the owner inbox', async (
+test('R4-04: categorized registration reaches a separate browser and the owner inbox', async (
   { page, context, browser, baseURL }, testInfo,
 ) => {
   test.skip(testInfo.project.name === 'local', 'Separate devices require the Supabase repository.')
@@ -377,8 +412,8 @@ test('R3-04: public registration reaches a separate browser and the owner inbox'
   const wakeTime = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit',
   }).format(wakeAt)
-  const goalTitle = 'R3-04 統合テスト ' + crypto.randomUUID()
-  const body = 'R3-04 統合テスト用のエールです。'
+  const goalTitle = 'R4-04 統合テスト ' + crypto.randomUUID()
+  const body = 'R4-04 統合テスト用のエールです。'
   let now = start
   const fixture = pages ? undefined : createSupabaseFixture(() => now)
   await fixture?.install(context)
@@ -405,19 +440,32 @@ test('R3-04: public registration reaches a separate browser and the owner inbox'
     await page.goto('/Asayell/')
     const visibility = page.getByRole('checkbox', { name: 'みんなに公開する' })
     await expect(visibility).not.toBeChecked()
-    await page.getByLabel('ニックネーム').fill('R3-04 動作確認')
+    await page.getByLabel('ニックネーム').fill('R4-04 動作確認')
     await page.getByLabel('夢・目標・楽しみ').fill(goalTitle)
+    await expectRegistrationCategories(page, '楽しみ')
     await page.getByLabel('起床予定時刻').fill(wakeTime)
     await visibility.check()
     const created = page.waitForRequest(request =>
       new URL(request.url()).pathname === rpcPath + 'asayell_create_goal',
     )
     await page.getByRole('button', { name: '目標を登録する' }).click()
-    const { p_support_token: supportToken, p_owner_token: ownerToken, p_is_public: isPublic } =
+    const { p_support_token: supportToken, p_owner_token: ownerToken, p_is_public: isPublic, p_category: category } =
       (await created).postDataJSON()
     ownerUrl = new URL('/Asayell/o/' + ownerToken, baseURL).href
     expect(isPublic).toBe(true)
+    expect(category).toBe('fun')
     await expect(page.getByRole('link', { name: '本人専用の受信URLを開く' })).toHaveAttribute('href', ownerUrl)
+
+    await expect(page).toHaveURL(/\/Asayell\/share\/[^/]+$/)
+    await expect(nav.getByRole('link', { name: '投稿' })).toHaveAttribute('aria-current', 'page')
+    await expect(nav.getByRole('link', { name: 'みんなの夢' })).toBeVisible()
+    await nav.getByRole('link', { name: 'プロフィール' }).click()
+    await expect(page).toHaveURL('/Asayell/me')
+    const profile = page.getByRole('article').filter({ hasText: goalTitle })
+    await expect(profile.getByText('楽しみ', { exact: true })).toBeVisible()
+    await expect(profile).not.toContainText(new URL('/Asayell/s/' + supportToken, baseURL).href)
+    await expect(profile).not.toContainText(ownerUrl)
+    await expect(profile.getByRole('button', { name: '応援募集URLをコピー' })).toBeVisible()
 
     await visitorPage.goto('/Asayell/me')
     await expect(visitorPage.getByText(/このブラウザには登録した夢の控えがありません/)).toBeVisible()
@@ -433,12 +481,15 @@ test('R3-04: public registration reaches a separate browser and the owner inbox'
           'category', 'detail', 'message_count', 'nickname', 'support_token', 'title', 'wake_at',
         ])
       }
+      expect(JSON.stringify(goals)).not.toContain(ownerToken)
+      expect(JSON.stringify(goals)).not.toContain(body)
       const ours = goals.find(goal => goal.support_token === supportToken)
       if (count === null) {
         expect(ours).toBeUndefined()
         await expect(card).toHaveCount(0)
       } else {
-        expect(ours).toMatchObject({ title: goalTitle, message_count: count })
+        expect(ours).toMatchObject({ title: goalTitle, category: 'fun', message_count: count })
+        await expect(card.getByText('楽しみ', { exact: true })).toBeVisible()
         await expect(card.getByText('届いた応援 ' + count + '件')).toBeVisible()
       }
     }
@@ -449,7 +500,7 @@ test('R3-04: public registration reaches a separate browser and the owner inbox'
     const supportResponse = await supporterGoal
     expect(supportResponse.ok()).toBe(true)
     expect(await supportResponse.json()).toEqual([{
-      nickname: 'R3-04 動作確認', title: goalTitle, detail: null, wake_at: expect.any(String), category: 'goal',
+      nickname: 'R4-04 動作確認', title: goalTitle, detail: null, wake_at: expect.any(String), category: 'fun',
     }])
     await expect(visitorNav).toHaveCount(0)
     await visitorPage.getByLabel('メッセージ本文').fill(body)
@@ -473,10 +524,8 @@ test('R3-04: public registration reaches a separate browser and the owner inbox'
     expect(await ownerResponse.json(), 'asayell_get_owner_goal must return is_public').toMatchObject([
       { title: goalTitle, is_public: true, is_unlocked: false, message_count: 1 },
     ])
-    const profile = page.getByRole('article').filter({ hasText: goalTitle })
     await expect(profile.getByText('届いた応援 1件')).toBeVisible()
     await expect(profile.locator('time')).toBeVisible()
-    await expect(profile).not.toContainText(new URL('/Asayell/s/' + supportToken, baseURL).href)
     const toggle = profile.getByRole('checkbox', { name: 'みんなの夢に公開' })
     await expect(toggle).toBeChecked()
     await profile.getByRole('button', { name: '受信画面を開く' }).click()
