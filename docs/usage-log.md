@@ -39,3 +39,4 @@ Gemini API 評価の使用トークンを記録する。Codex / Claude の使用
 | 2026-11-29 03:41 | PR #54 評価（Issue #51・R6-03 目標登録フォームに新入社員向け入力例、head 43e0d0ed、総合100%・mergeable） ※gemini-3.6-flashが503のためflash-liteで取得 | gemini-3.5-flash-lite | 1247 | 194 | 1441 |
 | 2026-11-29 03:43 | PR #55 評価（Issue #49・R6-01 受信前・受信後アンケートと継続利用意向、head 7e29407a、総合100%・mergeable） ※gemini-3.6-flashが503のためflash-liteで取得 | gemini-3.5-flash-lite | 5452 | 144 | 5596 |
 | 2026-11-29 03:44 | PR #56 評価（Issue #52・R6-04 集計CSV出力ページ /export、head 057e9032、総合100%・mergeable） | gemini-3.5-flash-lite | 1053 | 153 | 1206 |
+| 2026-11-29 04:26 | PR #57 再評価（Issue #50・R6-02 待機画面にエール件数表示、修正後head e636ad7c、総合100%・mergeable） ※gemini-3.6-flashが503のためflash-liteで取得 | gemini-3.5-flash-lite | 3013 | 222 | 3235 |
