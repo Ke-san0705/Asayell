@@ -12,7 +12,7 @@ const messageLimit = 150
 export function SupportPost({ repository, supportToken }: SupportPostProps) {
   const [goal, setGoal] = useState<SupportGoal | null>()
   const [loadFailed, setLoadFailed] = useState(false)
-  const [sender, setSender] = useState('')
+  const [sender, setSender] = useState<string>()
   const [body, setBody] = useState('')
   const [postStatus, setPostStatus] = useState<'idle' | 'pending' | 'sent' | 'failed'>('idle')
   const submissionStarted = useRef(false)
@@ -23,6 +23,10 @@ export function SupportPost({ repository, supportToken }: SupportPostProps) {
       (result) => { if (active) setGoal(result) },
       () => { if (active) setLoadFailed(true) },
     )
+    void repository.getProfile().then(
+      (profile) => { if (active) setSender(profile?.accountName ?? '') },
+      () => { if (active) setSender('') },
+    )
     return () => { active = false }
   }, [repository, supportToken])
 
@@ -32,7 +36,7 @@ export function SupportPost({ repository, supportToken }: SupportPostProps) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!goal || !canSubmit || submissionStarted.current) return
+    if (!goal || sender === undefined || !canSubmit || submissionStarted.current) return
 
     submissionStarted.current = true
     setPostStatus('pending')
@@ -67,6 +71,8 @@ export function SupportPost({ repository, supportToken }: SupportPostProps) {
         <p className="support-confirmation" role="status">
           エールを送りました。応援の気持ちは、翌朝に届きます。
         </p>
+      ) : sender === undefined ? (
+        <p role="status">アカウント名を読み込んでいます…</p>
       ) : (
         <form className="support-form" onSubmit={submit}>
           <div>
