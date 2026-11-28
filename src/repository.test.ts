@@ -92,3 +92,24 @@ it('publishes only upcoming opted-in goals and excludes hidden messages from cou
   await reopened.setPublic(goal.owner_token, false)
   expect(await repository.listPublicGoals()).toEqual([])
 })
+
+it('lists only device goals with counts before wake-up', async () => {
+  const { repository, storage } = setup()
+  const goal = await repository.createGoal({
+    nickname: 'あさ', title: '散歩', wake_at: '2099-01-01T07:00:00+09:00',
+  })
+  await repository.postMessage(goal.support_token, { body: '応援しています' })
+  await repository.setPublic(goal.owner_token, true)
+  const other = await repository.createGoal({
+    nickname: 'あさ', title: '読書', wake_at: '2099-01-01T08:00:00+09:00',
+  })
+  const reopened = new LocalStorageRepository(storage)
+  expect(await reopened.listOwnerGoals()).toEqual(expect.arrayContaining([{
+    goalId: goal.goal_id, ownerToken: goal.owner_token, supportToken: goal.support_token,
+    title: goal.title, wakeAt: goal.wake_at, isPublic: true, messageCount: 1,
+  }, {
+    goalId: other.goal_id, ownerToken: other.owner_token, supportToken: other.support_token,
+    title: other.title, wakeAt: other.wake_at, isPublic: false, messageCount: 0,
+  }]))
+  expect(await setup().repository.listOwnerGoals()).toEqual([])
+})

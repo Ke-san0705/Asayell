@@ -1,13 +1,12 @@
 import {
-  createGoalTokens, validateGoal, validateMessageBody,
+  createGoalTokens, toProfileGoal, validateGoal, validateMessageBody,
   type AsayellRepository, type Goal, type GoalInput, type InboxMessage,
-  type OwnerGoal, type PublicGoal, type SupportGoal, type SupportMessageInput,
+  type OwnerGoal, type ProfileGoal, type PublicGoal, type RepositoryStorage, type SupportGoal, type SupportMessageInput,
 } from './repository'
 
-type ShareStorage = Pick<Storage, 'getItem' | 'setItem'>
 type GoalRow = Omit<GoalInput, 'detail' | 'isPublic'> & { detail: string | null; is_public?: boolean }
 type CreatedGoalRow = GoalRow & { id: string; support_token: string; owner_token: string }
-type OwnerGoalRow = GoalRow & { is_unlocked: boolean }
+type OwnerGoalRow = GoalRow & { is_unlocked: boolean; message_count?: number }
 type MessageRow = Omit<InboxMessage, 'sender' | 'message_id'> & { id?: string; sender: string | null }
 type PublicGoalRow = Omit<PublicGoal, 'detail'> & { detail: string | null }
 
@@ -17,7 +16,7 @@ export class SupabaseRepository implements AsayellRepository {
   constructor(
     url: string,
     private readonly anonKey: string,
-    private readonly storage?: ShareStorage,
+    private readonly storage?: RepositoryStorage,
     private readonly request: typeof fetch = globalThis.fetch.bind(globalThis),
   ) {
     this.rpcUrl = url.replace(/\/+$/, '') + '/rest/v1/rpc/'
@@ -37,8 +36,8 @@ export class SupabaseRepository implements AsayellRepository {
     return response.json() as Promise<T>
   }
 
-  private shareKey(goalId: string) {
-    return `asayell:share:${this.rpcUrl}:${goalId}`
+  private get sharePrefix() {
+    return `asayell:share:${this.rpcUrl}:`
   }
 
   async createGoal(input: GoalInput): Promise<Goal> {
@@ -62,12 +61,12 @@ export class SupabaseRepository implements AsayellRepository {
       wake_at: row.wake_at, isPublic: row.is_public ?? false, support_token: row.support_token, owner_token: row.owner_token,
     }
     // The share route is opened by ID in the registering browser after navigation.
-    storage.setItem(this.shareKey(goal.goal_id), JSON.stringify(goal))
+    storage.setItem(this.sharePrefix + goal.goal_id, JSON.stringify(goal))
     return goal
   }
 
   async getGoalById(goalId: string): Promise<Goal | null> {
-    const value = (this.storage ?? window.localStorage).getItem(this.shareKey(goalId))
+    const value = (this.storage ?? window.localStorage).getItem(this.sharePrefix + goalId)
     return value === null ? null : JSON.parse(value) as Goal
   }
 
@@ -82,8 +81,25 @@ export class SupabaseRepository implements AsayellRepository {
     if (!row) return null
     return {
       nickname: row.nickname, title: row.title, detail: row.detail ?? undefined,
-      wake_at: row.wake_at, is_unlocked: row.is_unlocked, isPublic: row.is_public,
+      wake_at: row.wake_at, is_unlocked: row.is_unlocked, isPublic: row.is_public, message_count: row.message_count,
     }
+  }
+
+  async listOwnerGoals(): Promise<ProfileGoal[]> {
+    const storage = this.storage ?? window.localStorage
+    const savedGoals: Goal[] = []
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index)
+      if (!key?.startsWith(this.sharePrefix)) continue
+      const value = storage.getItem(key)
+      if (value !== null) savedGoals.push(JSON.parse(value) as Goal)
+    }
+
+    const goals = await Promise.all(savedGoals.map(async (saved) => {
+      const current = await this.getGoalByOwnerToken(saved.owner_token)
+      return current ? toProfileGoal(saved, current) : null
+    }))
+    return goals.filter((goal) => goal !== null)
   }
 
   async listPublicGoals(limit = 20): Promise<PublicGoal[]> {

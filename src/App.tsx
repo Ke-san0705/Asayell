@@ -1,4 +1,6 @@
 import { createContext } from 'react'
+import { BottomNavigation } from './BottomNavigation'
+import { Profile } from './Profile'
 import { GoalRegistration } from './GoalRegistration'
 import { GoalShare } from './GoalShare'
 import { MorningInbox } from './MorningInbox'
@@ -11,6 +13,7 @@ export const RepositoryContext = createContext<AsayellRepository | null>(null)
 
 const screens = {
   register: '目標登録',
+  profile: 'プロフィール',
   share: '目標を共有',
   support: 'エールを送る',
   owner: 'エールを受け取る',
@@ -23,17 +26,25 @@ interface AppProps {
 }
 
 export function App({ route, repository }: AppProps) {
-  if (route.name === 'feed') return <PublicFeed repository={repository} />
+  if (route.name === 'feed') return (
+    <>
+      <PublicFeed repository={repository} />
+      <BottomNavigation current="feed" />
+    </>
+  )
+
+  const hasNavigation = route.name === 'register' || route.name === 'profile'
 
   return (
     <RepositoryContext value={repository}>
-      <div className="shell">
+      <div className={hasNavigation ? 'shell shell-with-navigation' : 'shell'}>
         <header>
           <a className="brand" href={import.meta.env.BASE_URL}>アサエール</a>
         </header>
         <main className="card">
           <h1>{screens[route.name]}</h1>
           {route.name === 'register' && <GoalRegistration repository={repository} />}
+          {route.name === 'profile' && <Profile repository={repository} />}
           {route.name === 'share' && <GoalShare key={route.goalId} repository={repository} goalId={route.goalId} />}
           {route.name === 'owner' && (
             <MorningInbox key={route.ownerToken} ownerToken={route.ownerToken} repository={repository} />
@@ -45,7 +56,7 @@ export function App({ route, repository }: AppProps) {
               supportToken={route.supportToken}
             />
           )}
-          {(route.name === 'register' || route.name === 'owner') && (
+          {route.name === 'owner' && (
             <a href={import.meta.env.BASE_URL + 'feed'}>みんなの夢を見る</a>
           )}
           {route.name === 'notFound' && (
@@ -53,6 +64,7 @@ export function App({ route, repository }: AppProps) {
           )}
         </main>
       </div>
+      {hasNavigation && <BottomNavigation current={route.name} />}
     </RepositoryContext>
   )
 }
