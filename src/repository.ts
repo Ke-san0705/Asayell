@@ -88,6 +88,25 @@ export interface Message extends MessageInput {
 export type SupportMessageInput = Pick<MessageInput, 'sender' | 'body'>
 export type InboxMessage = Pick<Message, 'sender' | 'body' | 'created_at'> & { message_id?: string }
 
+export type SurveyPhase = 'pre' | 'post'
+
+export type SurveyResponse = {
+  isDemo: boolean
+  q1: number
+  q2: number
+  q3: number
+  consent: boolean
+} & ({ phase: 'pre' } | { phase: 'post'; continueIntent: number })
+
+export function validateSurveyResponse(response: SurveyResponse) {
+  if (response.consent !== true) throw new Error('検証参加への同意が必要です。')
+  const scores = [response.q1, response.q2, response.q3]
+  if (response.phase === 'post') scores.push(response.continueIntent)
+  if (scores.some((score) => !Number.isInteger(score) || score < 1 || score > 5)) {
+    throw new RangeError('アンケートの回答は1〜5で入力してください。')
+  }
+}
+
 export interface AsayellRepository {
   getProfile(): Promise<Profile | null>
   setProfile(accountName: string): Promise<Profile>
@@ -101,6 +120,8 @@ export interface AsayellRepository {
   hideMessage(ownerToken: string, messageId: string): Promise<void>
   postMessage(supportToken: string, input: SupportMessageInput): Promise<void>
   listOwnerMessages(ownerToken: string, demo?: boolean): Promise<InboxMessage[]>
+  saveSurveyResponse(ownerToken: string, response: SurveyResponse): Promise<void>
+  getSurveyStatus(ownerToken: string): Promise<SurveyPhase[]>
 }
 
 export type RepositoryStorage = Pick<Storage, 'getItem' | 'setItem' | 'key' | 'length'>
@@ -109,6 +130,10 @@ const goalPrefix = 'asayell:goal:'
 
 function messagePrefix(goalId: string) {
   return `asayell:message:${goalId}:`
+}
+
+function surveyKey(goalId: string, phase: SurveyPhase) {
+  return `asayell:survey:${goalId}:${phase}`
 }
 
 function createToken() {
@@ -288,6 +313,23 @@ export class LocalStorageRepository implements AsayellRepository {
     const goal = await this.getGoalByOwnerToken(ownerToken)
     if (!goal || (!demo && Date.now() < Date.parse(goal.wake_at))) return []
     return this.listMessages(goal.goal_id)
+  }
+
+  async saveSurveyResponse(ownerToken: string, response: SurveyResponse): Promise<void> {
+    validateSurveyResponse(response)
+    const goal = this.findStoredGoalByOwnerToken(ownerToken)
+    if (!goal) throw new Error('目標が見つかりません。')
+    const key = surveyKey(goal.goal_id, response.phase)
+    if (this.store.getItem(key) === null) {
+      this.store.setItem(key, JSON.stringify(response))
+    }
+  }
+
+  async getSurveyStatus(ownerToken: string): Promise<SurveyPhase[]> {
+    const goal = this.findStoredGoalByOwnerToken(ownerToken)
+    if (!goal) return []
+    const phases: SurveyPhase[] = ['pre', 'post']
+    return phases.filter((phase) => this.store.getItem(surveyKey(goal.goal_id, phase)) !== null)
   }
 
   async createMessage(input: MessageInput): Promise<Message> {

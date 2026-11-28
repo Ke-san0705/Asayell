@@ -69,6 +69,13 @@ async function registerGoal(
   return owner
 }
 
+async function skipPreSurvey(page: Page, timeout = 5_000) {
+  const skip = page.locator('form').getByRole('button', { name: '回答せずにエールを読む' })
+  const inboxContent = page.getByRole('blockquote').or(page.getByText('今日も自分のペースで。', { exact: true }))
+  await expect(skip.or(inboxContent)).toBeVisible({ timeout })
+  if (await skip.isVisible()) await skip.click()
+}
+
 async function expectNoHorizontalOverflow(page: Page) {
   await expect.poll(() => page.evaluate(() => {
     const documentWidth = document.documentElement.clientWidth
@@ -159,6 +166,12 @@ test('T01–T06: register, share, post and receive', async ({ page, context, bro
   await page.getByRole('button', { name: 'デモ：翌朝を体験する' }).click()
   await expect(page.getByText('デモモードで表示しています')).toBeVisible()
   await expect(page.getByText(nickname + 'さん、おはようございます。')).toBeVisible()
+  if (!pages) {
+    await expect(page.getByRole('heading', { name: '受信前アンケート' })).toBeVisible()
+    await expect(page.getByRole('blockquote')).toHaveCount(0)
+    await expectNoHorizontalOverflow(page)
+  }
+  await skipPreSurvey(page)
   await expect(page.getByText('1件', { exact: true })).toBeVisible()
   await expect(page.getByRole('blockquote')).toHaveText(message)
   await expectNoHorizontalOverflow(page)
@@ -184,6 +197,7 @@ test('T01–T06: register, share, post and receive', async ({ page, context, bro
   fixture?.unlock()
   await page.clock.setFixedTime(new Date('2026-11-29T07:00:00+09:00'))
   await page.reload()
+  await skipPreSurvey(page)
   await expect(page.getByRole('blockquote')).toHaveText(message)
   await expect(page.getByText('デモモードで表示しています')).toHaveCount(0)
   if (remote) expect(ownerMessageRequests).toContain(false)
@@ -191,6 +205,7 @@ test('T01–T06: register, share, post and receive', async ({ page, context, bro
   await page.getByRole('button', { name: '隠す' }).click()
   await expect(page.getByText('0件', { exact: true })).toBeVisible()
   await page.reload()
+  await skipPreSurvey(page)
   await expect(page.getByText('0件', { exact: true })).toBeVisible()
   await expect(page.getByRole('blockquote')).toHaveCount(0)
 })
@@ -202,6 +217,7 @@ test('T05: an empty inbox shows the fixed message', async ({ page, context }, te
   await owner.click()
   if (!pages) await expect(page.getByRole('checkbox', { name: 'みんなに公開する' })).toBeChecked()
   await page.getByRole('button', { name: 'デモ：翌朝を体験する' }).click()
+  await skipPreSurvey(page)
   await expect(page.getByText('0件', { exact: true })).toBeVisible()
   await expect(page.getByText('今日も自分のペースで。', { exact: true })).toBeVisible()
   await expect(page.getByRole('blockquote')).toHaveCount(0)
@@ -626,12 +642,14 @@ test('R4-04: categorized registration reaches a separate browser and the owner i
       await visitorPage.clock.setFixedTime(now)
     }
     await page.reload()
+    await skipPreSurvey(page, pages ? 195_000 : 5_000)
     await expect(page.getByRole('blockquote')).toHaveText(body, { timeout: pages ? 195_000 : 5_000 })
     await expect(page.getByText('デモモードで表示しています')).toHaveCount(0)
     await page.getByRole('button', { name: '隠す' }).click()
     await expect(page.getByText('0件', { exact: true })).toBeVisible()
     hidden = true
     await page.reload()
+    await skipPreSurvey(page)
     await expect(page.getByText('0件', { exact: true })).toBeVisible()
     await expect(page.getByRole('blockquote')).toHaveCount(0)
 
@@ -663,8 +681,10 @@ test('R4-04: categorized registration reaches a separate browser and the owner i
       }
       if (posted && !hidden) {
         const demo = page.getByRole('button', { name: 'デモ：翌朝を体験する' })
-        await expect(page.getByRole('blockquote').or(demo)).toBeVisible()
+        const skip = page.getByRole('button', { name: '回答せずにエールを読む' })
+        await expect(page.getByRole('blockquote').or(demo).or(skip)).toBeVisible()
         if (await demo.isVisible()) await demo.click()
+        await skipPreSurvey(page)
         await page.getByRole('button', { name: '隠す' }).click()
         await expect(page.getByText('0件', { exact: true })).toBeVisible()
       }

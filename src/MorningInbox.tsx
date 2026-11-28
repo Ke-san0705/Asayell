@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
-import type { AsayellRepository, InboxMessage } from './repository'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { InboxSurvey, skipPreSurveyLabel } from './InboxSurvey'
+import type { AsayellRepository, InboxMessage, SurveyPhase, SurveyResponse } from './repository'
 
 type InboxState =
   | { kind: 'loading' | 'missing' | 'error' }
@@ -25,6 +26,7 @@ export function MorningInbox({ ownerToken, repository }: MorningInboxProps) {
   const [demo, setDemo] = useState<{ nickname: string } | null>(null)
   const demoButton = useRef<HTMLButtonElement>(null)
   const returningFromDemo = useRef(false)
+  const pendingSurveys = useRef(new Set<Promise<void>>())
 
   useEffect(() => {
     if (!demo && returningFromDemo.current) {
@@ -112,7 +114,7 @@ export function MorningInbox({ ownerToken, repository }: MorningInboxProps) {
 
   if (demo) {
     return (
-      <InboxDemo ownerToken={ownerToken} nickname={demo.nickname} repository={repository}
+      <InboxDemo ownerToken={ownerToken} nickname={demo.nickname} repository={repository} pendingSurveys={pendingSurveys}
         hiddenIds={hiddenIds} hiding={hiding} onHide={hideMessage} onExit={() => {
         returningFromDemo.current = true
         setDemo(null)
@@ -143,7 +145,8 @@ export function MorningInbox({ ownerToken, repository }: MorningInboxProps) {
         </>
       )}
       {inbox.kind === 'ready' && (
-        <MessageReader messages={inbox.messages} hiddenIds={hiddenIds} hiding={hiding} onHide={hideMessage} />
+        <InboxReading ownerToken={ownerToken} repository={repository} pendingSurveys={pendingSurveys} isDemo={false}
+          messages={inbox.messages} hiddenIds={hiddenIds} hiding={hiding} onHide={hideMessage} />
       )}
       {(inbox.kind === 'waiting' || inbox.kind === 'ready') && isPublic !== undefined && (
         <div className="inbox-visibility">
@@ -165,10 +168,11 @@ interface MessageActions {
   onHide: (messageId: string) => Promise<void>
 }
 
-function InboxDemo({ ownerToken, nickname, repository, onExit, hiddenIds, hiding, onHide }: MessageActions & {
-  ownerToken: string
+type PendingSurveys = RefObject<Set<Promise<void>>>
+
+function InboxDemo({ ownerToken, nickname, repository, pendingSurveys, onExit, hiddenIds, hiding, onHide }: MessageActions & MorningInboxProps & {
   nickname: string
-  repository: AsayellRepository
+  pendingSurveys: PendingSurveys
   onExit: () => void
 }) {
   const [preview, setPreview] = useState<
@@ -202,7 +206,8 @@ function InboxDemo({ ownerToken, nickname, repository, onExit, hiddenIds, hiding
         {preview.kind === 'error' && (
           <p>今はエールを開けませんでした。デモを終了してから、もう一度お試しください。</p>
         )}
-        {preview.kind === 'ready' && <MessageReader messages={preview.messages} hiddenIds={hiddenIds} hiding={hiding} onHide={onHide} />}
+        {preview.kind === 'ready' && <InboxReading ownerToken={ownerToken} repository={repository} pendingSurveys={pendingSurveys} isDemo
+          messages={preview.messages} hiddenIds={hiddenIds} hiding={hiding} onHide={onHide} />}
       </div>
       <button className="action secondary inbox-action" type="button" disabled={hiding} onClick={onExit}>
         デモを終了する
@@ -211,7 +216,65 @@ function InboxDemo({ ownerToken, nickname, repository, onExit, hiddenIds, hiding
   )
 }
 
-function MessageReader({ messages, hiddenIds, hiding, onHide }: MessageActions & { messages: InboxMessage[] }) {
+function InboxReading({ ownerToken, repository, pendingSurveys, isDemo, ...reader }: MorningInboxProps & MessageActions & {
+  isDemo: boolean
+  pendingSurveys: PendingSurveys
+  messages: InboxMessage[]
+}) {
+  const [status, setStatus] = useState<SurveyPhase[] | null>()
+  const [dismissedPre, setDismissedPre] = useState(false)
+  const [dismissedPost, setDismissedPost] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    async function loadStatus() {
+      // The owner can exit a demo while a response is still being saved.
+      if (pendingSurveys.current.size) await Promise.allSettled(pendingSurveys.current)
+      if (!active) return
+      try {
+        const phases = await repository.getSurveyStatus(ownerToken)
+        if (active) setStatus(phases)
+      } catch {
+        // Keep the inbox available when the survey RPC is unavailable.
+        if (active) setStatus(null)
+      }
+    }
+    void loadStatus()
+    return () => { active = false }
+  }, [ownerToken, pendingSurveys, repository])
+
+  async function save(response: SurveyResponse) {
+    const request = repository.saveSurveyResponse(ownerToken, response)
+    const pending = pendingSurveys.current
+    pending.add(request)
+    try {
+      await request
+    } finally {
+      pending.delete(request)
+    }
+  }
+
+  if (!dismissedPre && status === undefined) {
+    return (
+      <button className="action secondary inbox-action" type="button" onClick={() => setDismissedPre(true)}>
+        {skipPreSurveyLabel}
+      </button>
+    )
+  }
+  if (!dismissedPre && status && !status.includes('pre')) {
+    return <InboxSurvey phase="pre" isDemo={isDemo} onSave={save} onDone={() => setDismissedPre(true)} />
+  }
+
+  return <MessageReader {...reader} afterReading={
+    !dismissedPost && status && !status.includes('post') &&
+    <InboxSurvey phase="post" isDemo={isDemo} onSave={save} onDone={() => setDismissedPost(true)} />
+  } />
+}
+
+function MessageReader({ messages, hiddenIds, hiding, onHide, afterReading }: MessageActions & {
+  messages: InboxMessage[]
+  afterReading: ReactNode
+}) {
   const [position, setPosition] = useState(0)
   const [hideError, setHideError] = useState(false)
   const isVisible = ({ message_id }: InboxMessage) => !message_id || !hiddenIds.has(message_id)
@@ -263,9 +326,12 @@ function MessageReader({ messages, hiddenIds, hiding, onHide }: MessageActions &
           {hideError && <p className="feedback" role="alert">エールを隠せませんでした。もう一度お試しください。</p>}
         </>
       ) : (
-        <p className="inbox-note" ref={closing} tabIndex={-1}>
-          すべてのエールを読み終えました。今日も、あなたのペースで。
-        </p>
+        <>
+          <p className="inbox-note" ref={closing} tabIndex={-1}>
+            すべてのエールを読み終えました。今日も、あなたのペースで。
+          </p>
+          {afterReading}
+        </>
       )}
     </>
   )

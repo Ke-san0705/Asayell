@@ -116,6 +116,9 @@ export function createSupabaseFixture(now = Date.now) {
               }] : [],
             })
             break
+          case rpcPath + 'asayell_get_survey_status':
+            await route.fulfill({ json: [] })
+            break
           case rpcPath + 'asayell_get_owner_messages':
             expect(typeof args.p_demo).toBe('boolean')
             await route.fulfill({ json: ownerGoal && (unlocked || args.p_demo) ? ownerGoal.messages : [] })
