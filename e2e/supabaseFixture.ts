@@ -17,7 +17,7 @@ type GoalRow = {
 }
 type MessageRow = { id: string; body: string | null; sender: string | null; created_at: string }
 
-export function createSupabaseFixture() {
+export function createSupabaseFixture(now = Date.now) {
   let goal: GoalRow | undefined
   const messages: MessageRow[] = []
   let unlocked = false
@@ -34,7 +34,7 @@ export function createSupabaseFixture() {
           apikey: fixtureKey,
           authorization: 'Bearer ' + fixtureKey,
         })
-        const args = request.postDataJSON() as RpcArgs & { p_demo?: boolean; p_is_public?: boolean }
+        const args = request.postDataJSON() as RpcArgs & { p_demo?: boolean; p_is_public?: boolean; p_limit?: number }
         const path = new URL(request.url()).pathname
         const supportGoal = goal && goal.support_token === args.p_support_token ? goal : undefined
         const ownerGoal = goal && goal.owner_token === args.p_owner_token ? goal : undefined
@@ -55,6 +55,14 @@ export function createSupabaseFixture() {
               is_public: args.p_is_public ?? false,
             }
             await route.fulfill({ json: goal })
+            break
+          case rpcPath + 'asayell_list_public_goals':
+            expect(args).toEqual({ p_limit: 20 })
+            await route.fulfill({
+              json: goal?.is_public && Date.parse(goal.wake_at) > now() ? [{
+                ...publicFields(goal), support_token: goal.support_token, message_count: messages.length,
+              }] : [],
+            })
             break
           case rpcPath + 'asayell_get_goal_for_support':
             await route.fulfill({ json: supportGoal ? [publicFields(supportGoal)] : [] })

@@ -30,6 +30,7 @@ npm run build
 - 既定のデータソースは Supabase です。接続先を指定する場合は `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KEY` に公開クライアント用の値を設定します。未設定時はアプリ内の公開設定を使います。
 - Supabase モードで登録・投稿・受信を行うには、接続先に [基盤 SQL](supabase/migrations/20261128000000_asayell_foundation.sql) を適用しておきます。
 - ブラウザ内で完結させる場合は `VITE_ASAYELL_REPOSITORY=local` を指定します。`npm run test:e2e` は local モードと、RPC 応答をテスト内で再現する Supabase モードの両方で実行します。Supabase モードの応援投稿は、登録側とストレージを共有しないブラウザコンテキストで行います。
+- 公開フィード（`/feed`）のローカル保存モードでは、このブラウザーで登録した公開中の夢だけが表示されます。
 
 ## GitHub Pages
 

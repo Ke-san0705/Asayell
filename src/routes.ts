@@ -1,5 +1,6 @@
 export type Route =
   | { name: 'register' }
+  | { name: 'feed' }
   | { name: 'share'; goalId: string }
   | { name: 'support'; supportToken: string }
   | { name: 'owner'; ownerToken: string }
@@ -10,7 +11,10 @@ export function matchRoute(pathname: string, base: string): Route {
   if (pathname === basePath || pathname === `${basePath}/`) return { name: 'register' }
   if (!pathname.startsWith(`${basePath}/`)) return { name: 'notFound' }
 
-  const match = /^\/(share|s|o)\/([^/]+)\/?$/.exec(pathname.slice(basePath.length))
+  const path = pathname.slice(basePath.length)
+  if (path === '/feed' || path === '/feed/') return { name: 'feed' }
+
+  const match = /^\/(share|s|o)\/([^/]+)\/?$/.exec(path)
   if (!match) return { name: 'notFound' }
 
   const [, section, parameter] = match
