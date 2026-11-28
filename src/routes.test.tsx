@@ -9,6 +9,7 @@ it.each([
   ['/Asayell/', { name: 'register' }, '目標登録'],
   ['/Asayell/feed', { name: 'feed' }, 'みんなの夢'],
   ['/Asayell/me', { name: 'profile' }, 'プロフィール'],
+  ['/Asayell/export', { name: 'export' }, '集計データ出力'],
   ['/Asayell/share/goal', { name: 'share', goalId: 'goal' }, '目標を共有'],
   ['/Asayell/s/support', { name: 'support', supportToken: 'support' }, 'エールを送る'],
   ['/Asayell/o/owner', { name: 'owner', ownerToken: 'owner' }, 'エールを受け取る'],
@@ -20,6 +21,7 @@ it.each([
   expect(html).toContain(`<h1>${heading}</h1>`)
   const navigation = html.match(/<nav[^>]*>.*?<\/nav>/)?.[0]
   expect(navigation).toBeDefined()
+  expect(navigation).not.toContain('/export')
   for (const destination of ['/', '/feed', '/me']) {
     expect(navigation).toContain(`href="${destination}"`)
   }

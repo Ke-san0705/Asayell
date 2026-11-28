@@ -9,12 +9,14 @@ import { PublicFeed } from './PublicFeed'
 import type { AsayellRepository } from './repository'
 import type { Route } from './routes'
 import { SupportPost } from './SupportPost'
+import { SurveyExport } from './SurveyExport'
 
 export const RepositoryContext = createContext<AsayellRepository | null>(null)
 
 const screens = {
   register: '目標登録',
   profile: 'プロフィール',
+  export: '集計データ出力',
   share: '目標を共有',
   support: 'エールを送る',
   owner: 'エールを受け取る',
@@ -42,6 +44,7 @@ export function App({ route, repository }: AppProps) {
             <h1>{screens[route.name]}</h1>
             {route.name === 'register' && <GoalRegistration repository={repository} />}
             {route.name === 'profile' && <Profile repository={repository} />}
+            {route.name === 'export' && <SurveyExport repository={repository} />}
             {route.name === 'share' && <GoalShare key={route.goalId} repository={repository} goalId={route.goalId} />}
             {route.name === 'owner' && (
               <MorningInbox key={route.ownerToken} ownerToken={route.ownerToken} repository={repository} />

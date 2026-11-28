@@ -1,3 +1,4 @@
+import { toSurveyResponseRow, type SurveyResponseRow } from './repository'
 import {
   createGoalTokens, defaultGoalCategory, getOrCreateDeviceId, normalizeAccountName, toProfileGoal, validateGoal, validateMessageBody,
   type AsayellRepository, type CreateGoalInput, type Goal, type GoalInput, type InboxMessage,
@@ -199,5 +200,10 @@ export class SupabaseRepository implements AsayellRepository {
     return rows.map(({ id, sender, body, created_at }) => ({
       message_id: id, sender: sender ?? undefined, body, created_at,
     }))
+  }
+
+  async listSurveyResponses(): Promise<SurveyResponseRow[]> {
+    const rows = await this.rpc<SurveyResponseRow[]>('asayell_list_survey_responses', {})
+    return rows.map(toSurveyResponseRow)
   }
 }

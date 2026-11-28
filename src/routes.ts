@@ -2,6 +2,7 @@ export type Route =
   | { name: 'register' }
   | { name: 'feed' }
   | { name: 'profile' }
+  | { name: 'export' }
   | { name: 'share'; goalId: string }
   | { name: 'support'; supportToken: string }
   | { name: 'owner'; ownerToken: string }
@@ -16,6 +17,7 @@ export function matchRoute(pathname: string, base: string): Route {
   if (path === '/feed' || path === '/feed/') return { name: 'feed' }
 
   if (path === '/me' || path === '/me/') return { name: 'profile' }
+  if (path === '/export' || path === '/export/') return { name: 'export' }
 
   const match = /^\/(share|s|o)\/([^/]+)\/?$/.exec(path)
   if (!match) return { name: 'notFound' }
