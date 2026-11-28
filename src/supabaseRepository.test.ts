@@ -11,10 +11,10 @@ it('registers, shares and receives across browsers using only token-scoped RPCs'
     expect(args).toEqual({
       p_nickname: input.nickname, p_title: input.title, p_detail: null, p_wake_at: input.wake_at,
       p_support_token: expect.stringMatching(/^[a-f0-9]{32}$/),
-      p_owner_token: expect.stringMatching(/^[a-f0-9]{32}$/),
+      p_owner_token: expect.stringMatching(/^[a-f0-9]{32}$/), p_is_public: true,
     })
     expect(args.p_support_token).not.toBe(args.p_owner_token)
-    return response([{ ...input, detail: null, id: 'goal-id',
+    return response([{ ...input, detail: null, id: 'goal-id', is_public: true,
       owner_token: args.p_owner_token, support_token: args.p_support_token }])
   })
   const entries = new Map<string, string>()
@@ -22,15 +22,15 @@ it('registers, shares and receives across browsers using only token-scoped RPCs'
     getItem: (key: string) => entries.get(key) ?? null,
     setItem: (key: string, value: string) => { entries.set(key, value) },
   }
-  const goal = await new SupabaseRepository(url, 'anon', storage, creation).createGoal(input)
-  expect(goal.goal_id).toBe('goal-id')
+  const goal = await new SupabaseRepository(url, 'anon', storage, creation).createGoal({ ...input, isPublic: true })
+  expect(goal).toMatchObject({ goal_id: 'goal-id', isPublic: true })
   const rpc = vi.fn<typeof fetch>()
     .mockResolvedValueOnce(response([{ ...input, detail: null }]))
     .mockResolvedValueOnce(response(true))
     .mockResolvedValueOnce(response([]))
-    .mockResolvedValueOnce(response([{ ...input, detail: null, message_count: 1, is_unlocked: false }]))
+    .mockResolvedValueOnce(response([{ ...input, detail: null, message_count: 1, is_unlocked: false, is_public: true }]))
     .mockResolvedValueOnce(response([]))
-    .mockResolvedValueOnce(response([{ sender: null, body, created_at: input.wake_at }]))
+    .mockResolvedValueOnce(response([{ id: 'message-id', sender: null, body, created_at: input.wake_at }]))
 
   const owner = new SupabaseRepository(url, 'anon', storage, rpc)
   const supporter = new SupabaseRepository(url, 'anon', { ...storage, getItem: () => null }, rpc)
@@ -40,10 +40,10 @@ it('registers, shares and receives across browsers using only token-scoped RPCs'
     .toEqual({ nickname: input.nickname, title: input.title, detail: undefined })
   await supporter.postMessage(goal.support_token, { body })
   expect(await supporter.getGoalByOwnerToken(goal.support_token)).toBeNull()
-  expect(await owner.getGoalByOwnerToken(goal.owner_token)).toMatchObject({ is_unlocked: false })
+  expect(await owner.getGoalByOwnerToken(goal.owner_token)).toMatchObject({ is_unlocked: false, isPublic: true })
   expect(await owner.listOwnerMessages(goal.owner_token)).toEqual([])
   expect(await owner.listOwnerMessages(goal.owner_token, true)).toEqual([
-    { sender: undefined, body, created_at: input.wake_at },
+    { message_id: 'message-id', sender: undefined, body, created_at: input.wake_at },
   ])
 
   expect(creation.mock.calls[0][0]).toBe(url + '/rest/v1/rpc/asayell_create_goal')
@@ -70,4 +70,24 @@ it('propagates HTTP failures and rejects unsuccessful posts', async () => {
   const repository = new SupabaseRepository('https://example.supabase.co', 'anon', undefined, rpc)
   await expect(repository.getGoalBySupportToken('token')).rejects.toThrow('503')
   await expect(repository.postMessage('token', { body: 'エール' })).rejects.toThrow()
+})
+
+
+it('uses the public listing and owner mutation RPCs and checks their results', async () => {
+  const url = 'https://example.supabase.co'
+  const rpc = vi.fn<typeof fetch>()
+    .mockResolvedValueOnce(Response.json([]))
+    .mockResolvedValueOnce(Response.json(true))
+    .mockResolvedValueOnce(Response.json(false))
+  const repository = new SupabaseRepository(url, 'anon', undefined, rpc)
+  expect(await repository.listPublicGoals(7)).toEqual([])
+  await repository.setPublic('owner', false)
+  await expect(repository.hideMessage('owner', 'message')).rejects.toThrow()
+
+  expect(rpc.mock.calls.map(([path, options]) => [path, JSON.parse(String(options?.body))]))
+    .toEqual([
+      [url + '/rest/v1/rpc/asayell_list_public_goals', { p_limit: 7 }],
+      [url + '/rest/v1/rpc/asayell_set_public', { p_owner_token: 'owner', p_is_public: false }],
+      [url + '/rest/v1/rpc/asayell_hide_message', { p_owner_token: 'owner', p_message_id: 'message' }],
+    ])
 })

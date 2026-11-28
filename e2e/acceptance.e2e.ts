@@ -10,7 +10,7 @@ function waitForRpc(page: Page, name: string) {
   return page.waitForResponse(response => new URL(response.url()).pathname === rpcPath + name)
 }
 
-async function registerGoal(page: Page, pages: boolean): Promise<Locator> {
+async function registerGoal(page: Page, pages: boolean, isPublic = false): Promise<Locator> {
   if (!pages) await page.clock.setFixedTime(new Date('2026-11-28T20:00:00+09:00'))
   const wakeTime = pages
     ? new Date(Date.now() + 12 * 60 * 60 * 1000).toLocaleTimeString('en-GB', {
@@ -24,6 +24,11 @@ async function registerGoal(page: Page, pages: boolean): Promise<Locator> {
   await page.getByLabel('夢・目標・楽しみ').fill(title)
   await page.getByLabel('詳細').fill(detail)
   await page.getByLabel('起床予定時刻').fill(wakeTime)
+  if (!pages) {
+    const visibility = page.getByRole('checkbox', { name: 'みんなに公開する' })
+    await expect(visibility).not.toBeChecked()
+    if (isPublic) await visibility.check()
+  }
   const created = pages ? waitForRpc(page, 'asayell_create_goal') : undefined
   await register.click()
   if (created) {
@@ -137,18 +142,35 @@ test('T01–T06: register, share, post and receive', async ({ page, context, bro
   }
 
   if (pages) return
+  const visibility = page.getByRole('checkbox', { name: 'みんなに公開する' })
+  await expect(visibility).not.toBeChecked()
+  await visibility.click()
+  await expect(visibility).toBeChecked()
+  await page.reload()
+  await expect(visibility).toBeChecked()
+  await visibility.click()
+  await expect(visibility).not.toBeChecked()
+
   fixture?.unlock()
   await page.clock.setFixedTime(new Date('2026-11-29T07:00:00+09:00'))
   await page.reload()
   await expect(page.getByRole('blockquote')).toHaveText(message)
   await expect(page.getByText('デモモードで表示しています')).toHaveCount(0)
   if (remote) expect(ownerMessageRequests).toContain(false)
+  await expect(visibility).not.toBeChecked()
+  await page.getByRole('button', { name: '隠す' }).click()
+  await expect(page.getByText('0件', { exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByText('0件', { exact: true })).toBeVisible()
+  await expect(page.getByRole('blockquote')).toHaveCount(0)
 })
 
 test('T05: an empty inbox shows the fixed message', async ({ page, context }, testInfo) => {
   if (testInfo.project.name === 'supabase') await createSupabaseFixture().install(context)
-  const owner = await registerGoal(page, testInfo.project.name === 'pages')
+  const pages = testInfo.project.name === 'pages'
+  const owner = await registerGoal(page, pages, !pages)
   await owner.click()
+  if (!pages) await expect(page.getByRole('checkbox', { name: 'みんなに公開する' })).toBeChecked()
   await page.getByRole('button', { name: 'デモ：翌朝を体験する' }).click()
   await expect(page.getByText('0件', { exact: true })).toBeVisible()
   await expect(page.getByText('今日も自分のペースで。', { exact: true })).toBeVisible()
