@@ -52,6 +52,7 @@ it('shows the target goal and saves a valid anonymous post without reading other
     expect(container.textContent).toContain(text)
   }
   expect(container.textContent).not.toContain('ほかの人からのエール')
+  expect(container.querySelector<HTMLInputElement>('#support-sender')?.value).toBe('')
 
   const button = container.querySelector('button')!
   expect(button.disabled).toBe(true)
@@ -74,6 +75,30 @@ it('shows the target goal and saves a valid anonymous post without reading other
   expect(posted?.sender).toBeUndefined()
   expect(await repository.listMessages(other.goal_id)).toEqual([])
 })
+
+it.each([['そのまま', '応援アカウント'], ['書き換え', '別の応援者名']])(
+  'prefills the account name and posts the sender name (%s)',
+  async (mode, expectedSender) => {
+    const goal = await repository.createGoal(goalInput)
+    await repository.setProfile('応援アカウント')
+    await openSupportPage(goal.support_token)
+
+    const sender = container.querySelector<HTMLInputElement>('#support-sender')!
+    expect(sender.value).toBe('応援アカウント')
+    if (mode === '書き換え') {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+      act(() => {
+        setValue.call(sender, expectedSender)
+        sender.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+    }
+
+    const body = '応援しています！'
+    enterMessage(body)
+    await act(async () => container.querySelector('button')!.click())
+    expect(await repository.listMessages(goal.goal_id)).toMatchObject([{ sender: expectedSender, body }])
+  },
+)
 
 it('shows a friendly message for a missing token', async () => {
   await openSupportPage('missing')
