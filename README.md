@@ -29,8 +29,17 @@ npm run build
 
 - 既定のデータソースは Supabase です。接続先を指定する場合は `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KEY` に公開クライアント用の値を設定します。未設定時はアプリ内の公開設定を使います。
 - Supabase モードで登録・投稿・受信を行うには、接続先に [基盤 SQL](supabase/migrations/20261128000000_asayell_foundation.sql) を適用しておきます。
-- ブラウザ内で完結させる場合は `VITE_ASAYELL_REPOSITORY=local` を指定します。Playwright の既存受け入れテストはこのモードで実行します。
+- ブラウザ内で完結させる場合は `VITE_ASAYELL_REPOSITORY=local` を指定します。`npm run test:e2e` は local モードと、RPC 応答をテスト内で再現する Supabase モードの両方で実行します。Supabase モードの応援投稿は、登録側とストレージを共有しないブラウザコンテキストで行います。
 
 ## GitHub Pages
 
 初回はリポジトリの **Settings → Pages → Build and deployment → Source** で **GitHub Actions** を選択します。以降、`main` への更新で `dist/` を公開します。共有・応援・受信の URL を直接開くと、GitHub Pages の `404.html` を経由して各画面が表示されます。
+
+公開サイトで T01〜T06 を確認する場合は、次のコマンドを実行します。
+
+```sh
+npx playwright install chromium
+ASAYELL_TEST_PAGES=1 npm run test:e2e
+```
+
+公開サイトのテストは Supabase に検証用の目標とエールを作成します。後で削除できるよう、実行ログの `Supabase acceptance goal id` を記録してください。T02 の本文受信はデモモードで確認します。
